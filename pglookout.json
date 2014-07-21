@@ -1,0 +1,16 @@
+{
+"log_level": "DEBUG",
+"http_address": "",
+"http_port": 15000,
+"remote_conns": {},
+"observers": {},
+"own_db": "own_db",
+"failover_command": "/usr/bin/failover_command",
+"failover_sleep_time": 0.0,
+"warning_replication_time_lag": 30.0,
+"max_failover_replication_time_lag": 120.0,
+"never_promote_these_nodes": [],
+"syslog": true,
+"syslog_address": "/dev/log",
+"syslog_facility": "local2"
+}
