@@ -244,8 +244,10 @@ class PgLookout(object):
             self.check_replication_lag(own_state, standby_nodes)
 
     def check_replication_lag(self, own_state, standby_nodes):
-        replication_lag = own_state['replication_time_lag']
-
+        replication_lag = own_state.get('replication_time_lag')
+        if not replication_lag:
+            self.log.warning("No replication lag set in own node state: %r", own_state)
+            return
         if replication_lag >= self.replication_lag_warning_boundary:
             self.log.warning("Replication time lag has grown to: %r which is over WARNING boundary: %r",
                              replication_lag, self.replication_lag_warning_boundary)
@@ -359,8 +361,12 @@ class PgLookout(object):
 
     def main_loop(self):
         while self.running:
+            # Separate try/except so we still write the state file
             try:
                 self.check_cluster_state()
+            except:
+                self.log.exception("Problem checking cluster state")
+            try:
                 self.write_cluster_state_to_json_file()
                 time.sleep(self.config.get("replication_state_check_interval", 5.0))
             except:
