@@ -38,7 +38,9 @@ class TimeoutError(Exception):
 def get_iso_timestamp(fetch_time=None):
     if not fetch_time:
         fetch_time = datetime.datetime.utcnow()
-    fetch_time.replace(microsecond=0)
+    elif fetch_time.tzinfo:
+        fetch_time = fetch_time.replace(tzinfo=None) - datetime.timedelta(seconds=fetch_time.utcoffset().seconds)
+    fetch_time = fetch_time.replace(microsecond=0)
     return fetch_time.isoformat() + "Z"
 
 def parse_iso_datetime(value):
@@ -178,11 +180,13 @@ class PgLookout(object):
                 if isinstance(db_state, dict):
                     if 'pg_is_in_recovery' in db_state:
                         if db_state['pg_is_in_recovery']:
-                            self.log.debug("observer_name: %r, dbname: %r, state: %r", observer_name, db_name, db_state)
                             observer_fetch_time = parse_iso_datetime(db_state['fetch_time'])
+                            self.log.debug("observer_name: %r, dbname: %r, state: %r, observer_fetch_time: %r",
+                                           observer_name, db_name, db_state, observer_fetch_time)
+
                             own_fetch_time = parse_iso_datetime(cluster_state.get(db_name, {"fetch_time": datetime.datetime(year=2000, month=1, day=1)})['fetch_time']) # pylint: disable=C0301
-                            # we always trust ourselves the most for localhost
-                            if observer_fetch_time > own_fetch_time and db_name != self.own_db:
+                            # we always trust ourselves the most for localhost, and in case we are actually connected to the other node
+                            if observer_fetch_time >= own_fetch_time and db_name != self.own_db and standby_nodes[db_name]['connection'] == False:
                                 standby_nodes[db_name] = db_state
                         else:
                             same_master = db_name == self.current_master
