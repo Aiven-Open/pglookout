@@ -209,6 +209,7 @@ class PgLookout(object):
                 self.log.warning("Picked %r as master since %r are in a disconnected state",
                                  master_host, disconnected_master_nodes)
         else:
+            self.create_alert_file("multiple_master_warning")
             self.log.error("More than one master node connected_master_nodes: %r, disconnected_master_nodes: %r",
                            connected_master_nodes, disconnected_master_nodes)
 
