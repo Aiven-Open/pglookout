@@ -176,27 +176,27 @@ class PgLookout(object):
                 self.log.debug("No knowledge on host: %r state: %r of whether it's in recovery or not", host, state)
 
         for observer_name, state in observer_state.items():
-            for db_name, db_state in state.items():
+            for host, db_state in state.items():
                 if isinstance(db_state, dict):
                     if 'pg_is_in_recovery' in db_state:
                         if db_state['pg_is_in_recovery']:
                             observer_fetch_time = parse_iso_datetime(db_state['fetch_time'])
                             self.log.debug("observer_name: %r, dbname: %r, state: %r, observer_fetch_time: %r",
-                                           observer_name, db_name, db_state, observer_fetch_time)
+                                           observer_name, host, db_state, observer_fetch_time)
 
-                            own_fetch_time = parse_iso_datetime(cluster_state.get(db_name, {"fetch_time": datetime.datetime(year=2000, month=1, day=1)})['fetch_time']) # pylint: disable=C0301
+                            own_fetch_time = parse_iso_datetime(cluster_state.get(host, {"fetch_time": datetime.datetime(year=2000, month=1, day=1)})['fetch_time']) # pylint: disable=C0301
                             # we always trust ourselves the most for localhost, and in case we are actually connected to the other node
-                            if observer_fetch_time >= own_fetch_time and db_name != self.own_db and standby_nodes[db_name]['connection'] == False:
-                                standby_nodes[db_name] = db_state
+                            if observer_fetch_time >= own_fetch_time and host != self.own_db and standby_nodes[host]['connection'] == False:
+                                standby_nodes[host] = db_state
                         else:
-                            same_master = db_name == self.current_master
+                            same_master = host == self.current_master
                             self.log.debug("Observer: %r sees %r as master, we see: %r, same_master: %r, connection: %r",
-                                           observer_name, db_name, self.current_master, same_master, db_state.get('connection'))
+                                           observer_name, host, self.current_master, same_master, db_state.get('connection'))
                             if db_state['connection']:
-                                connected_master_nodes[db_name] = db_state
+                                connected_master_nodes[host] = db_state
                     else:
                         self.log.warning("No knowledge on if: %r %r from observer: %r is in recovery",
-                                         db_name, db_state, observer_name)
+                                         host, db_state, observer_name)
 
         self.connected_master_nodes = connected_master_nodes
         if len(self.connected_master_nodes) == 0:
