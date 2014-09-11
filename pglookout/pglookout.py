@@ -212,10 +212,6 @@ class PgLookout(object):
             self.log.error("More than one master node connected_master_nodes: %r, disconnected_master_nodes: %r",
                            connected_master_nodes, disconnected_master_nodes)
 
-        if master_host != self.current_master:
-            self.log.info("New master node detected: old: %r new: %r: %r", self.current_master, master_host, master_node)
-            self.current_master = master_host
-
         return master_host, master_node, standby_nodes
 
     def check_cluster_state(self):
@@ -227,6 +223,11 @@ class PgLookout(object):
             return
 
         master_host, master_node, standby_nodes = self.create_node_map(cluster_state, observer_state) # pylint: disable=W0612
+
+        if master_host != self.current_master:
+            self.log.info("New master node detected: old: %r new: %r: %r", self.current_master, master_host, master_node)
+            self.current_master = master_host
+
         own_state = self.cluster_state.get(self.own_db)
 
         self.log.debug("Cluster has %s standbys, %s observers and %s as master, own_db: %r, own_state: %r",
