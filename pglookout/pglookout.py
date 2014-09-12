@@ -178,22 +178,27 @@ class PgLookout(object):
         for observer_name, state in observer_state.items():
             for host, db_state in state.items():
                 if isinstance(db_state, dict):
+                    own_fetch_time = parse_iso_datetime(cluster_state.get(host, {"fetch_time": datetime.datetime(year=2000, month=1, day=1)})['fetch_time']) # pylint: disable=C0301
+                    observer_fetch_time = parse_iso_datetime(db_state['fetch_time'])
+                    self.log.debug("observer_name: %r, dbname: %r, state: %r, observer_fetch_time: %r",
+                                   observer_name, host, db_state, observer_fetch_time)
                     if 'pg_is_in_recovery' in db_state:
                         if db_state['pg_is_in_recovery']:
-                            observer_fetch_time = parse_iso_datetime(db_state['fetch_time'])
-                            self.log.debug("observer_name: %r, dbname: %r, state: %r, observer_fetch_time: %r",
-                                           observer_name, host, db_state, observer_fetch_time)
-
-                            own_fetch_time = parse_iso_datetime(cluster_state.get(host, {"fetch_time": datetime.datetime(year=2000, month=1, day=1)})['fetch_time']) # pylint: disable=C0301
-                            # we always trust ourselves the most for localhost, and in case we are actually connected to the other node
-                            if observer_fetch_time >= own_fetch_time and host != self.own_db and standby_nodes[host]['connection'] == False:
+                            # we always trust ourselves the most for localhost, and
+                            # in case we are actually connected to the other node
+                            if observer_fetch_time >= own_fetch_time and host != self.own_db and standby_nodes[host]['connection'] == False: #pylint: disable=C0301
                                 standby_nodes[host] = db_state
                         else:
-                            same_master = host == self.current_master
+                            master_node = connected_master_nodes.get(host, {})
+                            connected = master_node.get("connection", False)
                             self.log.debug("Observer: %r sees %r as master, we see: %r, same_master: %r, connection: %r",
-                                           observer_name, host, self.current_master, same_master, db_state.get('connection'))
-                            if db_state['connection']:
-                                connected_master_nodes[host] = db_state
+                                           observer_name, host, self.current_master, host == self.current_master,
+                                           db_state.get('connection'))
+                            if observer_fetch_time >= own_fetch_time and host != self.own_db:
+                                if connected:
+                                    connected_master_nodes[host] = db_state
+                                else:
+                                    disconnected_master_nodes[host] = db_state
                     else:
                         self.log.warning("No knowledge on if: %r %r from observer: %r is in recovery",
                                          host, db_state, observer_name)
@@ -272,9 +277,9 @@ class PgLookout(object):
             self.delete_alert_file("replication_delay_warning")
 
         if replication_lag >= self.replication_lag_failover_timeout:
-            self.log.warning("Replication time lag has grown to: %r which is over CRITICAL boundary" \
+            self.log.warning("Replication time lag has grown to: %r which is over CRITICAL boundary: %r" \
                                  ", checking if we need to failover",
-                             self.replication_lag_failover_timeout)
+                             replication_lag, self.replication_lag_failover_timeout)
             self.do_failover_decision(own_state, standby_nodes)
         else:
             self.log.debug("Replication lag was: %r, other nodes status was: %r", replication_lag, standby_nodes)
