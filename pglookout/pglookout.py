@@ -40,7 +40,6 @@ def get_iso_timestamp(fetch_time=None):
         fetch_time = datetime.datetime.utcnow()
     elif fetch_time.tzinfo:
         fetch_time = fetch_time.replace(tzinfo=None) - datetime.timedelta(seconds=fetch_time.utcoffset().seconds)
-    fetch_time = fetch_time.replace(microsecond=0)
     return fetch_time.isoformat() + "Z"
 
 def parse_iso_datetime(value):
