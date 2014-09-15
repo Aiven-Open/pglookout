@@ -16,6 +16,25 @@ the observers have a more limited remit, they just observe the cluster
 status to give another viewpoint to the cluster state.
 
 
+Alert files
+===========
+
+multiple_master_warning
+
+This alert file is created when multiple masters are detected in the
+same cluster.
+
+replication_delay_warning
+
+This alert file is created when replication delay goes over the set
+warning limit.
+
+failover_has_happened
+
+This alert file is created whenever the failover command has been
+issued.
+
+
 Config keys
 ===========
 
