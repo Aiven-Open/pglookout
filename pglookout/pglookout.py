@@ -555,6 +555,14 @@ class ClusterMonitor(Thread):
                 replication_time_lag = abs(f_result['db_time'] - f_result['pg_last_xact_replay_timestamp'])
                 f_result["replication_time_lag"] = replication_time_lag.seconds + replication_time_lag.microseconds * 10**-6
                 f_result['pg_last_xact_replay_timestamp'] = f_result['pg_last_xact_replay_timestamp'].isoformat() + "Z"
+
+            if not f_result['pg_is_in_recovery']:
+                # These are set to None so when we query a standby promoted to master
+                # it looks identical to the results from a master node that's never been a standby
+                f_result.update({'pg_last_xlog_receive_location': None,
+                                 'pg_last_xact_replay_timestamp': None,
+                                 'pg_last_xlog_replay_location': None,
+                                 'replication_time_lag': 0.0})
             f_result.update({"db_time": f_result['db_time'].isoformat() + "Z", "connection": True})
             result.update(f_result)
         return result
