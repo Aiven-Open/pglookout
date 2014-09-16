@@ -15,6 +15,7 @@ import sys
 import time
 from email.utils import parsedate
 from psycopg2.extras import RealDictCursor
+from requests import ConnectionError
 from threading import Thread
 
 try:
@@ -177,7 +178,7 @@ class PgLookout(object):
         for observer_name, state in observer_state.items():
             for host, db_state in state.items():
                 if isinstance(db_state, dict):
-                    own_fetch_time = parse_iso_datetime(cluster_state.get(host, {"fetch_time": datetime.datetime(year=2000, month=1, day=1)})['fetch_time']) # pylint: disable=C0301
+                    own_fetch_time = parse_iso_datetime(cluster_state.get(host, {"fetch_time": get_iso_timestamp(datetime.datetime(year=2000, month=1, day=1))})['fetch_time']) # pylint: disable=C0301
                     observer_fetch_time = parse_iso_datetime(db_state['fetch_time'])
                     self.log.debug("observer_name: %r, dbname: %r, state: %r, observer_fetch_time: %r",
                                    observer_name, host, db_state, observer_fetch_time)
@@ -185,7 +186,7 @@ class PgLookout(object):
                         if db_state['pg_is_in_recovery']:
                             # we always trust ourselves the most for localhost, and
                             # in case we are actually connected to the other node
-                            if observer_fetch_time >= own_fetch_time and host != self.own_db and standby_nodes[host]['connection'] == False: #pylint: disable=C0301
+                            if observer_fetch_time >= own_fetch_time and host != self.own_db and standby_nodes.get(host, {"connection": False})['connection'] == False: #pylint: disable=C0301
                                 standby_nodes[host] = db_state
                         else:
                             master_node = connected_master_nodes.get(host, {})
@@ -476,6 +477,9 @@ class ClusterMonitor(Thread):
             conn = psycopg2.connect(dsn=dsn, async=True)
             wait_select(conn)
             self.log.debug("Connected to hostname: %r, dsn: %r", hostname, conn.dsn)
+        except psycopg2.OperationalError:
+            self.log.warning("Problem in connecting to DB at: %r", hostname)
+            conn = None
         except:
             self.log.exception("Problem in connecting to DB at: %r", hostname)
             conn = None
@@ -497,9 +501,11 @@ class ClusterMonitor(Thread):
                                hostname, time_diff, response.json()) # pylint: disable=E1103
                 return
             result.update(response.json()) # pylint: disable=E1103
+        except ConnectionError:
+            self.log.warning("Problem in fetching state from observer: %r, %r", hostname, fetch_uri)
+            result['connection'] = False
         except:
-            self.log.exception("Problem in fetching state from observer: %r, %r",
-                               hostname, fetch_uri)
+            self.log.exception("Problem in fetching state from observer: %r, %r", hostname, fetch_uri)
             result['connection'] = False
         return result
 
