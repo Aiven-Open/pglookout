@@ -6,7 +6,8 @@ import os
 import tempfile
 
 def _create_db_node_state(pg_last_xlog_receive_location=None, pg_is_in_recovery=True,
-                          connection=True, replication_time_lag=None, fetch_time=None):
+                          connection=True, replication_time_lag=None, fetch_time=None,
+                          db_time=None):
     return {
         "fetch_time": get_iso_timestamp(fetch_time),
         "pg_last_xlog_receive_location": pg_last_xlog_receive_location,
@@ -15,7 +16,7 @@ def _create_db_node_state(pg_last_xlog_receive_location=None, pg_is_in_recovery=
         "connection": connection,
         "pg_last_xlog_replay_location": None,
         "replication_time_lag": replication_time_lag,
-        "db_time": "2014-07-09T13:12:47.508239"
+        "db_time": get_iso_timestamp(db_time),
         }
 
 
@@ -44,9 +45,11 @@ class TestPgLookout(TestCase):
 
 
     def _add_to_observer_state(self, observer_name, db_name, pg_last_xlog_receive_location=None,
-                               pg_is_in_recovery=True, connection=True, replication_time_lag=None):
+                               pg_is_in_recovery=True, connection=True, replication_time_lag=None,
+                               fetch_time=None, db_time=None):
         db_node_state = _create_db_node_state(pg_last_xlog_receive_location, pg_is_in_recovery,
-                                              connection, replication_time_lag)
+                                              connection, replication_time_lag, fetch_time=fetch_time,
+                                              db_time=db_time)
         update_dict = {"fetch_time": get_iso_timestamp(),
                        "connection": True, db_name: db_node_state}
         if observer_name in self.pglookout.observer_state:
@@ -55,9 +58,11 @@ class TestPgLookout(TestCase):
             self.pglookout.observer_state[observer_name] = update_dict
 
     def _add_db_to_cluster_state(self, db_name, pg_last_xlog_receive_location=None,
-                                 pg_is_in_recovery=True, connection=True, replication_time_lag=None):
+                                 pg_is_in_recovery=True, connection=True, replication_time_lag=None,
+                                 fetch_time=None, db_time=None):
         db_node_state = _create_db_node_state(pg_last_xlog_receive_location, pg_is_in_recovery,
-                                              connection, replication_time_lag)
+                                              connection, replication_time_lag, fetch_time=fetch_time,
+                                              db_time=db_time)
         self.pglookout.cluster_state[db_name] = db_node_state
 
     def test_check_cluster_state_warning(self):
@@ -84,13 +89,15 @@ class TestPgLookout(TestCase):
         self.assertFalse(self.pglookout.replication_lag_over_warning_limit)
 
     def test_check_cluster_do_failover_one_slave(self):
-        self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False)
+        self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False,
+                                      db_time=datetime.datetime(year=2014, month=1, day=1))
 
         self._add_db_to_cluster_state("kuu", pg_last_xlog_receive_location="1/aaaaaaaa",
                                       pg_is_in_recovery=True, connection=True, replication_time_lag=130.0)
+
         self.pglookout.own_db = "kuu"
         self.pglookout.execute_external_command.return_value = 0
-        self.pglookout.replication_lag_over_warning_limit = True
+        self.pglookout.replication_lag_over_warning_limit = False
         self.pglookout.check_cluster_state()
         self.assertEqual(self.pglookout.execute_external_command.call_count, 1)
         self.assertFalse(self.pglookout.replication_lag_over_warning_limit)
@@ -140,7 +147,8 @@ class TestPgLookout(TestCase):
         self.assertTrue(self.pglookout.replication_lag_over_warning_limit) # we keep the warning on
 
     def test_check_cluster_do_failover_two_slaves_when_the_one_ahead_can_never_be_promoted(self):
-        self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False)
+        self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False,
+                                      db_time=datetime.datetime(year=2014, month=1, day=1))
 
         self._add_db_to_cluster_state("kuu", pg_last_xlog_receive_location="1/aaaaaaaa",
                                       pg_is_in_recovery=True, connection=True, replication_time_lag=130.0)
@@ -154,6 +162,18 @@ class TestPgLookout(TestCase):
         self.pglookout.check_cluster_state()
         self.assertEqual(self.pglookout.execute_external_command.call_count, 1)
         self.assertFalse(self.pglookout.replication_lag_over_warning_limit)
+
+    def test_failover_over_replication_lag(self):
+        self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False)
+
+        # We will make our own node to be the furthest along so we get considered for promotion
+        self._add_db_to_cluster_state("kuu", pg_last_xlog_receive_location="2/aaaaaaaa",
+                                      pg_is_in_recovery=True, connection=True, replication_time_lag=130.0)
+        self.pglookout.own_db = "kuu"
+
+        self.pglookout.check_cluster_state()
+        self.assertEqual(self.pglookout.execute_external_command.call_count, 0)
+        self.assertTrue(self.pglookout.replication_lag_over_warning_limit) # we keep the warning on
 
     def test_failover_no_connections(self):
         self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False)
@@ -171,7 +191,8 @@ class TestPgLookout(TestCase):
         self.assertTrue(self.pglookout.replication_lag_over_warning_limit) # we keep the warning on
 
     def test_failover_master_two_slaves_one_observer_no_connection_between_slaves(self):
-        self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False)
+        self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False,
+                                      db_time=datetime.datetime(year=2014, month=1, day=1))
         # We will make our own node to be the furthest along so we get considered for promotion
         self._add_db_to_cluster_state("own", pg_last_xlog_receive_location="2/aaaaaaaa",
                                       pg_is_in_recovery=True, connection=True, replication_time_lag=130.0)
@@ -181,7 +202,8 @@ class TestPgLookout(TestCase):
                                       pg_is_in_recovery=True, connection=False, replication_time_lag=130.0)
 
         # Add observer state
-        self._add_to_observer_state("observer", "old_master", pg_is_in_recovery=False, connection=False)
+        self._add_to_observer_state("observer", "old_master", pg_is_in_recovery=False, connection=False,
+                                    db_time=datetime.datetime(year=2014, month=1, day=1))
         self._add_to_observer_state("observer", "other", pg_last_xlog_receive_location="1/aaaaaaaa",
                                     pg_is_in_recovery=True, connection=True, replication_time_lag=130.0)
         self._add_to_observer_state("observer", "own", pg_last_xlog_receive_location="2/aaaaaaaa",
@@ -222,11 +244,13 @@ class TestPgLookout(TestCase):
         self.assertTrue(self.pglookout.replication_lag_over_warning_limit) # we keep the warning on
 
         #observer state
-        self._add_to_observer_state("observer", "old_master", pg_is_in_recovery=False, connection=False)
+        self._add_to_observer_state("observer", "old_master", pg_is_in_recovery=False, connection=False,
+                                    db_time=datetime.datetime(year=2014, month=1, day=1))
         self._add_to_observer_state("observer", "own", pg_last_xlog_receive_location="2/aaaaaaaa",
                                     pg_is_in_recovery=True, connection=False, replication_time_lag=140.0)
         # lose own connection to master
-        self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False)
+        self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False,
+                                      db_time=datetime.datetime(year=2014, month=1, day=1))
         # now do failover
         self.pglookout.check_cluster_state()
         self.assertEqual(self.pglookout.execute_external_command.call_count, 1)

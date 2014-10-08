@@ -75,6 +75,7 @@ class PgLookout(object):
         self.log_level = "DEBUG"
 
         self.connected_master_nodes = {}
+        self.disconnected_master_nodes = {}
         self.replication_lag_warning_boundary = None
         self.replication_lag_failover_timeout = None
         self.own_db = None
@@ -204,6 +205,7 @@ class PgLookout(object):
                                          host, db_state, observer_name)
 
         self.connected_master_nodes = connected_master_nodes
+        self.disconnected_master_nodes = disconnected_master_nodes
         if len(self.connected_master_nodes) == 0:
             self.log.warning("No known master node, disconnected masters: %r", list(disconnected_master_nodes.keys()))
             if len(disconnected_master_nodes) > 0:
@@ -265,8 +267,9 @@ class PgLookout(object):
             self.log.warning("No replication lag set in own node state: %r", own_state)
             return
         if replication_lag >= self.replication_lag_warning_boundary:
-            self.log.warning("Replication time lag has grown to: %r which is over WARNING boundary: %r",
-                             replication_lag, self.replication_lag_warning_boundary)
+            self.log.warning("Replication time lag has grown to: %r which is over WARNING boundary: %r, %r",
+                             replication_lag, self.replication_lag_warning_boundary,
+                             self.replication_lag_over_warning_limit)
             if not self.replication_lag_over_warning_limit: # we just went over the boundary
                 self.replication_lag_over_warning_limit = True
                 self.create_alert_file("replication_delay_warning")
@@ -299,8 +302,20 @@ class PgLookout(object):
                 known_replication_positions[convert_xlog_location_to_offset(node_state['pg_last_xlog_receive_location'])] = hostname # pylint: disable=C0301
         return known_replication_positions
 
+    def _have_we_been_in_contact_with_the_master_within_the_failover_timeout(self):
+        # no need to do anything here if there are no disconnected masters
+        if len(self.disconnected_master_nodes) > 0:
+            disconnected_master_node = self.disconnected_master_nodes.values()[0]
+            db_time = disconnected_master_node.get('db_time', get_iso_timestamp()) or get_iso_timestamp()
+            time_since_last_contact = datetime.datetime.utcnow() - parse_iso_datetime(db_time)
+            if time_since_last_contact < datetime.timedelta(seconds=self.replication_lag_failover_timeout):
+                self.log.debug("We've had contact with master: %r within the last %.2fs, not failing over",
+                               disconnected_master_node, time_since_last_contact.total_seconds())
+                return True
+        return False
+
     def do_failover_decision(self, own_state, standby_nodes):
-        if len(self.connected_master_nodes) > 0:
+        if len(self.connected_master_nodes) > 0 or self._have_we_been_in_contact_with_the_master_within_the_failover_timeout():
             self.log.warning("We still have some connected masters: %r, not failing over", self.connected_master_nodes)
             return
 
@@ -569,7 +584,7 @@ class ClusterMonitor(Thread):
                                  'pg_last_xact_replay_timestamp': None,
                                  'pg_last_xlog_replay_location': None,
                                  'replication_time_lag': 0.0})
-            f_result.update({"db_time": f_result['db_time'].isoformat() + "Z", "connection": True})
+            f_result.update({"db_time": get_iso_timestamp(f_result['db_time']), "connection": True})
             result.update(f_result)
         return result
 
