@@ -309,8 +309,8 @@ class PgLookout(object):
             db_time = disconnected_master_node.get('db_time', get_iso_timestamp()) or get_iso_timestamp()
             time_since_last_contact = datetime.datetime.utcnow() - parse_iso_datetime(db_time)
             if time_since_last_contact < datetime.timedelta(seconds=self.replication_lag_failover_timeout):
-                self.log.debug("We've had contact with master: %r within the last %.2fs, not failing over",
-                               disconnected_master_node, time_since_last_contact.total_seconds())
+                self.log.debug("We've had contact with master: %r at: %r within the last %.2fs, not failing over",
+                               disconnected_master_node, db_time, time_since_last_contact.seconds)
                 return True
         return False
 
