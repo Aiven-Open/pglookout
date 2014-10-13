@@ -163,13 +163,30 @@ class TestPgLookout(TestCase):
         self.assertEqual(self.pglookout.execute_external_command.call_count, 1)
         self.assertFalse(self.pglookout.replication_lag_over_warning_limit)
 
-    def test_failover_over_replication_lag(self):
+    def test_failover_over_replication_lag_when_still_connected_to_master(self):
         self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False)
 
         # We will make our own node to be the furthest along so we get considered for promotion
         self._add_db_to_cluster_state("kuu", pg_last_xlog_receive_location="2/aaaaaaaa",
                                       pg_is_in_recovery=True, connection=True, replication_time_lag=130.0)
         self.pglookout.own_db = "kuu"
+
+        self.pglookout.check_cluster_state()
+        self.assertEqual(self.pglookout.execute_external_command.call_count, 0)
+        self.assertTrue(self.pglookout.replication_lag_over_warning_limit) # we keep the warning on
+
+    def test_failover_over_replication_lag_with_one_observer_one_slave_no_connections(self):
+        self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False)
+
+        # We will make our own node to be the furthest along so we get considered for promotion
+        self._add_db_to_cluster_state("own_db", pg_last_xlog_receive_location="2/aaaaaaaa",
+                                      pg_is_in_recovery=True, connection=True, replication_time_lag=130.0)
+        self.pglookout.own_db = "own_db"
+
+        self._add_to_observer_state("observer", "old_master", pg_is_in_recovery=False, connection=False,
+                                    db_time=datetime.datetime(year=2014, month=1, day=1))
+        self._add_to_observer_state("observer", "own", pg_last_xlog_receive_location="2/aaaaaaaa",
+                                    pg_is_in_recovery=True, connection=False, replication_time_lag=130.0)
 
         self.pglookout.check_cluster_state()
         self.assertEqual(self.pglookout.execute_external_command.call_count, 0)
