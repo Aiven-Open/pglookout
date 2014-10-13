@@ -92,10 +92,28 @@ class TestPgLookout(TestCase):
         self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False,
                                       db_time=datetime.datetime(year=2014, month=1, day=1))
 
-        self._add_db_to_cluster_state("kuu", pg_last_xlog_receive_location="1/aaaaaaaa",
+        self._add_db_to_cluster_state("own_db", pg_last_xlog_receive_location="1/aaaaaaaa",
                                       pg_is_in_recovery=True, connection=True, replication_time_lag=130.0)
 
-        self.pglookout.own_db = "kuu"
+        self.pglookout.own_db = "own_db"
+        self.pglookout.execute_external_command.return_value = 0
+        self.pglookout.replication_lag_over_warning_limit = False
+        self.pglookout.check_cluster_state()
+        self.assertEqual(self.pglookout.execute_external_command.call_count, 1)
+        self.assertFalse(self.pglookout.replication_lag_over_warning_limit)
+
+    def test_check_cluster_do_failover_one_slave_one_observer(self):
+        self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False,
+                                      db_time=datetime.datetime(year=2014, month=1, day=1))
+
+        self._add_db_to_cluster_state("own_db", pg_last_xlog_receive_location="1/aaaaaaaa",
+                                      pg_is_in_recovery=True, connection=True, replication_time_lag=130.0)
+        self.pglookout.own_db = "own_db"
+        self._add_to_observer_state("observer", "old_master", pg_is_in_recovery=False, connection=False,
+                                    db_time=datetime.datetime(year=2014, month=1, day=1))
+        self._add_to_observer_state("observer", "own_db", pg_last_xlog_receive_location="2/aaaaaaaa",
+                                    pg_is_in_recovery=True, connection=True, replication_time_lag=130.0)
+
         self.pglookout.execute_external_command.return_value = 0
         self.pglookout.replication_lag_over_warning_limit = False
         self.pglookout.check_cluster_state()
@@ -185,9 +203,9 @@ class TestPgLookout(TestCase):
 
         self._add_to_observer_state("observer", "old_master", pg_is_in_recovery=False, connection=False,
                                     db_time=datetime.datetime(year=2014, month=1, day=1))
-        self._add_to_observer_state("observer", "own", pg_last_xlog_receive_location="2/aaaaaaaa",
+        self._add_to_observer_state("observer", "own_db", pg_last_xlog_receive_location="2/aaaaaaaa",
                                     pg_is_in_recovery=True, connection=False, replication_time_lag=130.0)
-
+        self.pglookout.observer_state["observer"]['connection'] = False
         self.pglookout.check_cluster_state()
         self.assertEqual(self.pglookout.execute_external_command.call_count, 0)
         self.assertTrue(self.pglookout.replication_lag_over_warning_limit) # we keep the warning on

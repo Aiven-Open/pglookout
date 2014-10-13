@@ -76,6 +76,8 @@ class PgLookout(object):
 
         self.connected_master_nodes = {}
         self.disconnected_master_nodes = {}
+        self.connected_observer_nodes = {}
+        self.disconnected_observer_nodes = {}
         self.replication_lag_warning_boundary = None
         self.replication_lag_failover_timeout = None
         self.own_db = None
@@ -163,6 +165,7 @@ class PgLookout(object):
     def create_node_map(self, cluster_state, observer_state):
         standby_nodes, master_node, master_host = {}, None, None
         connected_master_nodes, disconnected_master_nodes = {}, {}
+        connected_observer_nodes, disconnected_observer_nodes = {}, {}
         self.log.debug("Creating node map out of cluster_state: %r and observer_state: %r",
                        cluster_state, observer_state)
         for host, state in cluster_state.items():
@@ -177,8 +180,13 @@ class PgLookout(object):
                 self.log.debug("No knowledge on host: %r state: %r of whether it's in recovery or not", host, state)
 
         for observer_name, state in observer_state.items():
+            connected = state.get("connection", False)
+            if connected:
+                connected_observer_nodes[observer_name] = state.get("fetch_time")
+            else:
+                disconnected_observer_nodes[observer_name] = state.get("fetch_time")
             for host, db_state in state.items():
-                if isinstance(db_state, dict):
+                if isinstance(db_state, dict): # other keys are "connection" and "fetch_time"
                     own_fetch_time = parse_iso_datetime(cluster_state.get(host, {"fetch_time": get_iso_timestamp(datetime.datetime(year=2000, month=1, day=1))})['fetch_time']) # pylint: disable=C0301
                     observer_fetch_time = parse_iso_datetime(db_state['fetch_time'])
                     self.log.debug("observer_name: %r, dbname: %r, state: %r, observer_fetch_time: %r",
@@ -206,6 +214,9 @@ class PgLookout(object):
 
         self.connected_master_nodes = connected_master_nodes
         self.disconnected_master_nodes = disconnected_master_nodes
+        self.connected_observer_nodes = connected_observer_nodes
+        self.disconnected_observer_nodes = disconnected_observer_nodes
+
         if len(self.connected_master_nodes) == 0:
             self.log.warning("No known master node, disconnected masters: %r", list(disconnected_master_nodes.keys()))
             if len(disconnected_master_nodes) > 0:
@@ -327,11 +338,13 @@ class PgLookout(object):
         self.log.warning("Node that is furthest along is: %r, all replication positions were: %r",
                          furthest_along_host, known_replication_positions)
 
-        total_amount_of_standbys = len(standby_nodes) + 1 - len(self.never_promote_these_nodes) # +1 comes from the master node
-        size_of_needed_majority = total_amount_of_standbys * 0.5
-        size_of_known_state = len(known_replication_positions)
+        total_observers = len(self.connected_observer_nodes) + len(self.disconnected_observer_nodes)
+        # +1 in the calcaulation comes from the master node
+        total_amount_of_nodes = len(standby_nodes) + 1 - len(self.never_promote_these_nodes) + total_observers
+        size_of_needed_majority = total_amount_of_nodes * 0.5
+        size_of_known_state = len(known_replication_positions) + len(self.connected_observer_nodes)
         self.log.debug("Size of known state: %.2f, needed majority: %r, %r/%r", size_of_known_state,
-                       size_of_needed_majority, len(known_replication_positions), int(total_amount_of_standbys))
+                       size_of_needed_majority, len(known_replication_positions), int(total_amount_of_nodes))
 
         if standby_nodes[furthest_along_host] == own_state:
             if os.path.exists(self.config.get("maintenance_mode_file", "/tmp/pglookout_maintenance_mode_file")):
