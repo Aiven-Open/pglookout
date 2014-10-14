@@ -1,3 +1,9 @@
+pglookout (1.0.0) unstable; urgency=low
+
+  * First version in common use
+
+ -- Hannu Valtonen <ext-hannu.valtonen@f-secure.com>  Tue, 14 Oct 2014 14:10:10 +0200
+
 pglookout (0.0.1) unstable; urgency=low
 
   * Initial version
