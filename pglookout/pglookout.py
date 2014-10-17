@@ -148,7 +148,7 @@ class PgLookout(object):
     def write_cluster_state_to_json_file(self):
         """Periodically write a JSON state file to disk"""
         start_time = time.time()
-        state_file_path = self.config.get("json_state_file_path", "/tmp/json_state_file")
+        state_file_path = self.config.get("json_state_file_path", "/tmp/pglookout_state.json")
         try:
             self.overall_state = {"db_nodes": self.cluster_state, "observer_nodes": self.observer_state,
                                   "current_master": self.current_master}

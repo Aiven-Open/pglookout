@@ -11,7 +11,7 @@ def main():
         sys.exit(-1)
     try:
         config = json.loads(open(sys.argv[1], "r").read())
-        state_file_path = config.get("json_state_file_path", "/tmp/json_state_file")
+        state_file_path = config.get("json_state_file_path", "/tmp/pglookout_state.json")
         if time.time() - os.stat(state_file_path).st_mtime > 60.0:
             # file older than one minute, pglookout probably dead, exit with minus one
             sys.exit(-1)

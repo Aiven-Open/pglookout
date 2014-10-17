@@ -82,7 +82,7 @@ alert_file_dir defualt os.getcwd()
 Directory in which alert files for replication warning and failover
 are created.
 
-json_state_file_path (default "/tmp/json_state_file")
+json_state_file_path (default "/tmp/pglookout_state.json")
 
 Location of a JSON state file which describes the state of the
 pglookout process.
