@@ -1,3 +1,10 @@
+"""
+pglookout
+
+Copyright (c) 2014 F-Secure
+See LICENSE for details
+"""
+
 import json
 import os
 import sys

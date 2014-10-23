@@ -1,3 +1,10 @@
+"""
+pglookout
+
+Copyright (c) 2014 F-Secure
+See LICENSE for details
+"""
+
 from pglookout.pglookout import PgLookout, parse_iso_datetime, get_iso_timestamp
 from mock import Mock # pylint: disable=F0401
 from unittest import TestCase
