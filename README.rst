@@ -134,6 +134,12 @@ syslog_facility (default local2)
 Determines syslog log facility. (requires syslog to be true as well)
 
 
+Vulnerability reporting
+=======================
+
+If you would like to report a vulnerability or have a security concern on pglookout, please contact opensource@f-secure.com.
+
+
 Copyright
 =========
 
