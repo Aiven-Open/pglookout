@@ -51,8 +51,7 @@ class TestPgLookout(TestCase):
     def test_load_config(self):
         self.pglookout.own_db = "old_value"
         self.pglookout.load_config()
-        self.assertEqual(self.pglookout.own_db, "own_db")
-
+        self.assertEqual(self.pglookout.own_db, "1.2.3.4")
 
     def _add_to_observer_state(self, observer_name, db_name, pg_last_xlog_receive_location=None,
                                pg_is_in_recovery=True, connection=True, replication_time_lag=None,
@@ -372,4 +371,3 @@ class TestPgLookout(TestCase):
             os.unlink("replication_delay_warning")
         if os.path.exists("failover_has_happened"):
             os.unlink("failover_has_happened")
-
