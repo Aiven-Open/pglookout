@@ -7,6 +7,9 @@ test: pylint unittest
 unittest:
 	PYTHONPATH=test/ nosetests --nologcapture --nocapture test/
 
+unittest3:
+	PYTHONPATH=test/ nosetests --nologcapture --nocapture test/
+
 pylint:
 	pylint --rcfile .pylintrc $(PYLINT_DIRS)
 

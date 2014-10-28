@@ -136,7 +136,10 @@ class PgLookout(object):
                                                      self.log)
         self.own_db = self.config.get("own_db")
         # the levelNames hack is needed for Python2.6
-        self.log_level = logging._levelNames[self.config.get("log_level", "DEBUG")] # pylint: disable=W0212
+        if sys.version_info[0] >= 3:
+            self.log_level = getattr(logging, self.config.get("log_level", "DEBUG"))
+        else:
+            self.log_level = logging._levelNames[self.config.get("log_level", "DEBUG")] # pylint: disable=W0212
         try:
             self.log.setLevel(self.log_level)
             if self.cluster_monitor:
@@ -227,9 +230,9 @@ class PgLookout(object):
         if len(self.connected_master_nodes) == 0:
             self.log.warning("No known master node, disconnected masters: %r", list(disconnected_master_nodes.keys()))
             if len(disconnected_master_nodes) > 0:
-                master_host, master_node = disconnected_master_nodes.keys()[0], disconnected_master_nodes.values()[0]
+                master_host, master_node = list(disconnected_master_nodes.keys())[0], list(disconnected_master_nodes.values())[0]
         elif len(self.connected_master_nodes) == 1:
-            master_host, master_node = connected_master_nodes.keys()[0], connected_master_nodes.values()[0]
+            master_host, master_node = list(connected_master_nodes.keys())[0], list(connected_master_nodes.values())[0]
             if disconnected_master_nodes:
                 self.log.warning("Picked %r as master since %r are in a disconnected state",
                                  master_host, disconnected_master_nodes)
@@ -323,7 +326,7 @@ class PgLookout(object):
     def _have_we_been_in_contact_with_the_master_within_the_failover_timeout(self):
         # no need to do anything here if there are no disconnected masters
         if len(self.disconnected_master_nodes) > 0:
-            disconnected_master_node = self.disconnected_master_nodes.values()[0]
+            disconnected_master_node = list(self.disconnected_master_nodes.values())[0]
             db_time = disconnected_master_node.get('db_time', get_iso_timestamp()) or get_iso_timestamp()
             time_since_last_contact = datetime.datetime.utcnow() - parse_iso_datetime(db_time)
             if time_since_last_contact < datetime.timedelta(seconds=self.replication_lag_failover_timeout):
