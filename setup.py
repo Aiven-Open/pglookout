@@ -7,7 +7,7 @@ setup(
     version = os.getenv("VERSION") or __version__,
     zip_safe = False,
     packages = find_packages(exclude=["test", "systest"]),
-    install_requires = [],
+    install_requires = ['psycopg2 >= 2.0.0', 'requests >= 1.2.0'],
     extras_require = {},
     dependency_links = [],
     package_data = {},
