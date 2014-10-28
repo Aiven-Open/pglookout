@@ -2,10 +2,10 @@ Source: pglookout
 Maintainer: Hannu Valtonen <hannu.valtonen@ohmu.fi>
 Section: python
 Priority: optional
-Build-Depends: python-setuptools (>= 0.6b3), python-all (>= 2.6.6-3), debhelper (>= 7.4.3), python-simplejson (>= 3.3.3-1)
+Build-Depends: python-setuptools (>= 0.6b3), python-all (>= 2.6.6-3), debhelper (>= 7.4.3)
 Standards-Version: 3.9.1
 
 Package: pglookout
 Architecture: all
-Depends: ${misc:Depends}, ${python:Depends}, python-psycopg2 (>= 2.4.0-1), python-simplejson (>= 3.3.3-1), python-requests (>= 1.2.0-1)
+Depends: ${misc:Depends}, ${python:Depends}, python-psycopg2 (>= 2.4.0-1), python-requests (>= 1.2.0-1)
 Description: pglookout provides a monitoring/failover service for PostgreSQL streaming replication.

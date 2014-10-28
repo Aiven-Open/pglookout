@@ -8,6 +8,7 @@ See LICENSE for details
 import copy
 import datetime
 import errno
+import json
 import logging
 import logging.handlers
 import os
@@ -29,9 +30,7 @@ try:
     from SocketServer import ThreadingMixIn # pylint: disable=F0401
     from BaseHTTPServer import HTTPServer # pylint: disable=F0401
     from SimpleHTTPServer import SimpleHTTPRequestHandler # pylint: disable=F0401
-    import simplejson as json # pylint: disable=F0401
 except ImportError: # Support Py3k
-    import json
     from socketserver import ThreadingMixIn # pylint: disable=F0401
     from http.server import HTTPServer, SimpleHTTPRequestHandler # pylint: disable=F0401
 
