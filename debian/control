@@ -1,5 +1,5 @@
 Source: pglookout
-Maintainer: Hannu Valtonen <ext-hannu.valtonen@f-secure.com>
+Maintainer: Hannu Valtonen <hannu.valtonen@ohmu.fi>
 Section: python
 Priority: optional
 Build-Depends: python-setuptools (>= 0.6b3), python-all (>= 2.6.6-3), debhelper (>= 7.4.3), python-simplejson (>= 3.3.3-1)
