@@ -31,8 +31,10 @@ python setup.py test
 
 %files
 %defattr(-,root,root,-)
-%doc LICENSE README.rst
+
+%doc LICENSE README.rst pglookout.json
 %{_bindir}/pglookout*
+
 %{python_sitelib}/*
 
 %changelog
