@@ -392,7 +392,7 @@ class PgLookout(object):
         except subprocess.CalledProcessError as err:
             self.log.exception("Problem with executing: %r, return_code: %r, output: %r",
                                command, err.returncode, err.output)
-            return_code = err.return_code # pylint: disable=E1101
+            return_code = err.returncode # pylint: disable=E1101
         self.log.warning("Executed external command: %r, output: %r", return_code, output)
         return return_code
 
