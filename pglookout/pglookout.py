@@ -632,13 +632,13 @@ class ClusterMonitor(Thread):
                 self.log.exception("Problem in ClusterMonitor")
             time.sleep(self.config.get("db_poll_interval", 5.0))
 
-def main():
-    if len(sys.argv) == 2 and os.path.exists(sys.argv[1]):
-        pglookout = PgLookout(sys.argv[1])
+def main(args):
+    if len(args) == 1 and os.path.exists(args[0]):
+        pglookout = PgLookout(args[0])
         pglookout.run()
     else:
         print("Usage, pglookout <config filename>")
-        sys.exit(0)
+        return 1
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main(sys.argv[1:]))
