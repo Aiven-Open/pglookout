@@ -17,12 +17,14 @@ def main(args):
     if not os.path.exists(args[0]):
         return -1
     try:
-        config = json.loads(open(args[0], "r").read())
+        with open(args[0], "r") as fp:
+            config = json.load(fp)
         state_file_path = config.get("json_state_file_path", "/tmp/pglookout_state.json")
         if time.time() - os.stat(state_file_path).st_mtime > 60.0:
             # file older than one minute, pglookout probably dead, exit with minus one
             return -1
-        state_dict = json.loads(open(state_file_path, "r").read())
+        with open(state_file_path, "r") as fp:
+            state_dict = json.load(fp)
         current_master = state_dict['current_master']
         print(current_master)
     except:

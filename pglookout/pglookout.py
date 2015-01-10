@@ -124,7 +124,8 @@ class PgLookout(object):
         self.log.debug("Loading JSON config from: %r, signal: %r, frame: %r",
                        self.config_path, _signal, _frame)
         try:
-            self.config = json.load(open(self.config_path, "r"))
+            with open(self.config_path) as fp:
+                self.config = json.load(fp)
         except:
             self.log.exception("Invalid JSON config, exiting")
             sys.exit(0)
@@ -400,7 +401,8 @@ class PgLookout(object):
         try:
             filepath = os.path.join(self.config.get("alert_file_dir", os.getcwd()), filename)
             self.log.debug("Creating alert file: %r", filepath)
-            open(filepath, "w").write("alert")
+            with open(filepath, "w") as fp:
+                fp.write("alert")
         except:
             self.log.exception("Problem writing alert file: %r", filepath)
 
@@ -485,6 +487,9 @@ def wait_select(conn, timeout=10.0):
                 select.select([], [conn.fileno()], [], min(timeout, time_left))
             else:
                 raise psycopg2.OperationalError("bad state from poll: %s" % state)
+        except OSError as error:
+            if error.errno != errno.EINTR:
+                raise
         except select.error as error:
             if error[0] != errno.EINTR:
                 raise
