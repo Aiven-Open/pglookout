@@ -417,16 +417,17 @@ class PgLookout(object):
     def main_loop(self):
         while self.running:
             # Separate try/except so we still write the state file
+            sleep_time = 5.0
             try:
+                sleep_time = float(self.config.get("replication_state_check_interval", 5.0))
                 self.check_cluster_state()
             except:
-                self.log.exception("Problem checking cluster state")
+                self.log.exception("Failed to check cluster state")
             try:
                 self.write_cluster_state_to_json_file()
-                time.sleep(self.config.get("replication_state_check_interval", 5.0))
             except:
-                self.log.exception("Problem in main_loop, sleeping for 5.0s")
-                time.sleep(5.0)
+                self.log.exception("Failed to write cluster state")
+            time.sleep(sleep_time)
 
     def run(self):
         self.cluster_monitor.start()
@@ -519,8 +520,9 @@ class ClusterMonitor(Thread):
             conn = psycopg2.connect(dsn=dsn, async=True)
             wait_select(conn)
             self.log.debug("Connected to hostname: %r, dsn: %r", hostname, conn.dsn)
-        except psycopg2.OperationalError:
-            self.log.warning("Problem in connecting to DB at: %r", hostname)
+        except psycopg2.OperationalError as ex:
+            self.log.warning("%s (%s) connecting to DB at: %r",
+                             ex.__class__.__name__, ex, hostname)
             conn = None
         except:
             self.log.exception("Problem in connecting to DB at: %r", hostname)
@@ -543,8 +545,9 @@ class ClusterMonitor(Thread):
                                hostname, time_diff, response.json()) # pylint: disable=E1103
                 return
             result.update(response.json()) # pylint: disable=E1103
-        except ConnectionError:
-            self.log.warning("Problem in fetching state from observer: %r, %r", hostname, fetch_uri)
+        except ConnectionError as ex:
+            self.log.warning("%s (%s) fetching state from observer: %r, %r",
+                             ex.__class__.__name__, ex, hostname, fetch_uri)
             result['connection'] = False
         except:
             self.log.exception("Problem in fetching state from observer: %r, %r", hostname, fetch_uri)
@@ -584,15 +587,7 @@ class ClusterMonitor(Thread):
             c.execute(query)
             wait_select(c.connection)
             f_result = c.fetchone()
-        except TimeoutError:
-            self.log.exception("Problem with hostname: %r conn", hostname)
-            db_conn.close()
-            self.db_conns[hostname] = None
-        except psycopg2.OperationalError:
-            self.log.exception("Problem with hostname: %r conn", hostname)
-            db_conn.close()
-            self.db_conns[hostname] = None
-        except psycopg2.InterfaceError:
+        except (TimeoutError, psycopg2.OperationalError, psycopg2.InterfaceError):
             self.log.exception("Problem with hostname: %r, closing connection", hostname)
             db_conn.close()
             self.db_conns[hostname] = None
