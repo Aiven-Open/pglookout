@@ -409,8 +409,9 @@ class PgLookout(object):
     def delete_alert_file(self, filename):
         try:
             filepath = os.path.join(self.config.get("alert_file_dir", os.getcwd()), filename)
-            self.log.debug("Deleting alert file: %r", filepath)
-            os.unlink(filepath)
+            if os.path.exists(filepath):
+                self.log.debug("Deleting alert file: %r", filepath)
+                os.unlink(filepath)
         except:
             self.log.exception("Problem unlinking: %r", filepath)
 
