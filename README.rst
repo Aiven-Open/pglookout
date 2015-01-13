@@ -51,9 +51,9 @@ observers (default {})
 
 This object contains key value pairs like {"1.2.3.4":
 "http://2.3.4.5:15000"}. They are used to determine the location of
-pglookout observer processes. Processes that don't take any action,
-but simply give a 3rd party perspective on the state of the cluster.
-Useful especially during net splits.
+pglookout observer processes. Observers are processes that don't take
+any actions, but simply give a third party viewpoint on the state of
+the cluster. Useful especially during net splits.
 
 http_address (default '')
 
