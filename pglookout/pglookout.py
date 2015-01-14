@@ -124,7 +124,8 @@ class PgLookout(object):
         self.log.debug("Loading JSON config from: %r, signal: %r, frame: %r",
                        self.config_path, _signal, _frame)
         try:
-            self.config = json.load(open(self.config_path, "r"))
+            with open(self.config_path) as fp:
+                self.config = json.load(fp)
         except:
             self.log.exception("Invalid JSON config, exiting")
             sys.exit(0)
@@ -400,31 +401,34 @@ class PgLookout(object):
         try:
             filepath = os.path.join(self.config.get("alert_file_dir", os.getcwd()), filename)
             self.log.debug("Creating alert file: %r", filepath)
-            open(filepath, "w").write("alert")
+            with open(filepath, "w") as fp:
+                fp.write("alert")
         except:
             self.log.exception("Problem writing alert file: %r", filepath)
 
     def delete_alert_file(self, filename):
         try:
             filepath = os.path.join(self.config.get("alert_file_dir", os.getcwd()), filename)
-            self.log.debug("Deleting alert file: %r", filepath)
-            os.unlink(filepath)
+            if os.path.exists(filepath):
+                self.log.debug("Deleting alert file: %r", filepath)
+                os.unlink(filepath)
         except:
             self.log.exception("Problem unlinking: %r", filepath)
 
     def main_loop(self):
         while self.running:
             # Separate try/except so we still write the state file
+            sleep_time = 5.0
             try:
+                sleep_time = float(self.config.get("replication_state_check_interval", 5.0))
                 self.check_cluster_state()
             except:
-                self.log.exception("Problem checking cluster state")
+                self.log.exception("Failed to check cluster state")
             try:
                 self.write_cluster_state_to_json_file()
-                time.sleep(self.config.get("replication_state_check_interval", 5.0))
             except:
-                self.log.exception("Problem in main_loop, sleeping for 5.0s")
-                time.sleep(5.0)
+                self.log.exception("Failed to write cluster state")
+            time.sleep(sleep_time)
 
     def run(self):
         self.cluster_monitor.start()
@@ -485,6 +489,9 @@ def wait_select(conn, timeout=10.0):
                 select.select([], [conn.fileno()], [], min(timeout, time_left))
             else:
                 raise psycopg2.OperationalError("bad state from poll: %s" % state)
+        except OSError as error:
+            if error.errno != errno.EINTR:
+                raise
         except select.error as error:
             if error[0] != errno.EINTR:
                 raise
@@ -514,8 +521,9 @@ class ClusterMonitor(Thread):
             conn = psycopg2.connect(dsn=dsn, async=True)
             wait_select(conn)
             self.log.debug("Connected to hostname: %r, dsn: %r", hostname, conn.dsn)
-        except psycopg2.OperationalError:
-            self.log.warning("Problem in connecting to DB at: %r", hostname)
+        except psycopg2.OperationalError as ex:
+            self.log.warning("%s (%s) connecting to DB at: %r",
+                             ex.__class__.__name__, ex, hostname)
             conn = None
         except:
             self.log.exception("Problem in connecting to DB at: %r", hostname)
@@ -538,8 +546,9 @@ class ClusterMonitor(Thread):
                                hostname, time_diff, response.json()) # pylint: disable=E1103
                 return
             result.update(response.json()) # pylint: disable=E1103
-        except ConnectionError:
-            self.log.warning("Problem in fetching state from observer: %r, %r", hostname, fetch_uri)
+        except ConnectionError as ex:
+            self.log.warning("%s (%s) fetching state from observer: %r, %r",
+                             ex.__class__.__name__, ex, hostname, fetch_uri)
             result['connection'] = False
         except:
             self.log.exception("Problem in fetching state from observer: %r, %r", hostname, fetch_uri)
@@ -579,15 +588,7 @@ class ClusterMonitor(Thread):
             c.execute(query)
             wait_select(c.connection)
             f_result = c.fetchone()
-        except TimeoutError:
-            self.log.exception("Problem with hostname: %r conn", hostname)
-            db_conn.close()
-            self.db_conns[hostname] = None
-        except psycopg2.OperationalError:
-            self.log.exception("Problem with hostname: %r conn", hostname)
-            db_conn.close()
-            self.db_conns[hostname] = None
-        except psycopg2.InterfaceError:
+        except (TimeoutError, psycopg2.OperationalError, psycopg2.InterfaceError):
             self.log.exception("Problem with hostname: %r, closing connection", hostname)
             db_conn.close()
             self.db_conns[hostname] = None
@@ -632,13 +633,13 @@ class ClusterMonitor(Thread):
                 self.log.exception("Problem in ClusterMonitor")
             time.sleep(self.config.get("db_poll_interval", 5.0))
 
-def main():
-    if len(sys.argv) == 2 and os.path.exists(sys.argv[1]):
-        pglookout = PgLookout(sys.argv[1])
+def main(args):
+    if len(args) == 1 and os.path.exists(args[0]):
+        pglookout = PgLookout(args[0])
         pglookout.run()
     else:
         print("Usage, pglookout <config filename>")
-        sys.exit(0)
+        return 1
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main(sys.argv[1:]))
