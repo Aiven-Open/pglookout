@@ -31,3 +31,6 @@ rpm:
 		--define 'major_version $(short_ver)' \
 		--define 'minor_version $(subst -,.,$(subst $(short_ver)-,,$(long_ver)))'
 	$(RM) pglookout-rpm-src.tar.gz
+
+build-dep-fed:
+	sudo yum -y install python-devel python-nose python-psycopg2 python3-psycopg2
