@@ -33,4 +33,4 @@ rpm:
 	$(RM) pglookout-rpm-src.tar.gz
 
 build-dep-fed:
-	sudo yum -y install python-devel python-nose python-psycopg2 python3-psycopg2
+	sudo yum -y install python-devel python-nose python-psycopg2 python3-psycopg2 python-mock
