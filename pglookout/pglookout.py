@@ -633,7 +633,9 @@ class ClusterMonitor(Thread):
                 self.log.exception("Problem in ClusterMonitor")
             time.sleep(self.config.get("db_poll_interval", 5.0))
 
-def main(args):
+def main(args=None):
+    if not args:
+        args = sys.argv[1:]
     if len(args) == 1 and os.path.exists(args[0]):
         pglookout = PgLookout(args[0])
         pglookout.run()
