@@ -1,0 +1,13 @@
+[Unit]
+Description=PostgreSQL replication monitoring and failover daemon
+
+[Service]
+User=pglookout
+Group=pglookout
+Type=notify
+Restart=always
+ExecStart=/usr/bin/pglookout /var/lib/pglookout/pglookout.json
+WorkingDirectory=/var/lib/pglookout
+
+[Install]
+WantedBy=local.target

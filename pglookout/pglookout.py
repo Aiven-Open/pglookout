@@ -34,6 +34,11 @@ except ImportError: # Support Py3k
     from socketserver import ThreadingMixIn # pylint: disable=F0401
     from http.server import HTTPServer, SimpleHTTPRequestHandler # pylint: disable=F0401
 
+try:
+    from systemd import daemon
+except:
+    daemon = None
+
 format_str = "%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s"
 syslog_format_str = '%(name)s %(levelname)s: %(message)s'
 
@@ -111,6 +116,9 @@ class PgLookout(object):
         self.cluster_monitor.log.setLevel(self.log_level)
         self.webserver = WebServer(self.config, self.cluster_state)
 
+        if daemon: # If we can import systemd we always notify it
+            daemon.notify("READY=1")
+            self.log.info("Sent startup notification to systemd that pglookout is READY")
         self.log.info("PGLookout initialized, own_hostname: %r, own_db: %r, cwd: %r",
                       socket.gethostname(), self.own_db, os.getcwd())
 
