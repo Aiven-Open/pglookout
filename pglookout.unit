@@ -10,4 +10,4 @@ ExecStart=/usr/bin/pglookout /var/lib/pglookout/pglookout.json
 WorkingDirectory=/var/lib/pglookout
 
 [Install]
-WantedBy=local.target
+WantedBy=multi-user.target
