@@ -12,7 +12,7 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 BuildRequires:  python-devel
 BuildRequires:  python-distribute
 BuildRequires:  python-nose
-Requires:       python-psycopg2, python-requests
+Requires:       python-psycopg2, python-requests, python-setuptools
 Requires(pre):  shadow-utils
 BuildArch:      noarch
 
