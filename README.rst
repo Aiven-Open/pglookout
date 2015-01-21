@@ -19,6 +19,12 @@ status to give another viewpoint to the cluster state.
 Alert files
 ===========
 
+authentication_error
+
+There has been a problem in the authentication of at least one of the
+PostgreSQL connections. This usually denotes either a wrong
+username/password or incorrect pg_hba.conf settings.
+
 multiple_master_warning
 
 This alert file is created when multiple masters are detected in the

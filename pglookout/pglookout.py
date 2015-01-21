@@ -111,7 +111,7 @@ class PgLookout(object):
                               "replication_lag_over_warning": self.replication_lag_over_warning_limit}
 
         self.cluster_monitor = ClusterMonitor(self.config, self.cluster_state,
-                                              self.observer_state)
+                                              self.observer_state, self.create_alert_file)
         # cluster_monitor doesn't exist at the time of reading the config initially
         self.cluster_monitor.log.setLevel(self.log_level)
         self.webserver = WebServer(self.config, self.cluster_state)
@@ -506,13 +506,14 @@ def wait_select(conn, timeout=10.0):
     raise TimeoutError("timed out in wait_select")
 
 class ClusterMonitor(Thread):
-    def __init__(self, config, cluster_state, observer_state):
+    def __init__(self, config, cluster_state, observer_state, create_alert_file):
         Thread.__init__(self)
         self.log = logging.getLogger("ClusterMonitor")
         self.running = True
         self.cluster_state = cluster_state
         self.observer_state = observer_state
         self.config = config
+        self.create_alert_file = create_alert_file
         self.db_conns = {}
         self.observers = self.config.get("observers", {})
         self.session = requests.Session()
@@ -532,6 +533,8 @@ class ClusterMonitor(Thread):
         except psycopg2.OperationalError as ex:
             self.log.warning("%s (%s) connecting to DB at: %r",
                              ex.__class__.__name__, ex, hostname)
+            if hasattr(ex, "message") and 'password authentication' in ex.message:
+                self.create_alert_file("authentication_error")
             conn = None
         except:
             self.log.exception("Problem in connecting to DB at: %r", hostname)
