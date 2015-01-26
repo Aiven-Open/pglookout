@@ -10,7 +10,9 @@ import os
 import sys
 import time
 
-def main(args):
+def main(args=None):
+    if args is None:
+        args = sys.argv[1:]
     if len(args) != 1:
         print("Usage, pglookout_current_master <path_to_pglookout.json>")
         return -1
