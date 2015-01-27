@@ -1,5 +1,8 @@
-pglookout
-=========
+pglookout |BuildStatus|_
+========================
+
+.. |BuildStatus| image:: https://travis-ci.org/ohmu/pglookout.png?branch=master
+.. _BuildStatus: https://travis-ci.org/ohmu/pglookout
 
 pglookout is a python based PostgreSQL database replication state.
 The purpose of pglookout is to monitor PG database nodes, and their
