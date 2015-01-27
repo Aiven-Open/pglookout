@@ -9,7 +9,7 @@ from pglookout.pglookout import PgLookout, parse_iso_datetime, get_iso_timestamp
 try:
     from mock import Mock # pylint: disable=F0401
 except: # py3k import location
-    from unittest.mock import Mock
+    from unittest.mock import Mock # pylint: disable=F0401,E0611
 from unittest import TestCase
 import datetime
 import os

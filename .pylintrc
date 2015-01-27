@@ -35,12 +35,14 @@ load-plugins=
 # it should appear only once).
 # C0103=invalid name
 # C0111=missing docstring
+# I0011=Locally disabling
 # W0702= too broad except
+# R0903= too few public methods
 # R0904= too many public methods
 # R0912= too many branches
 # R0913= too many arguments
 # R0913= too many local variables
-disable=C0103, C0111, W0702, R0904, R0912, R0913, R0914
+disable=C0103, C0111, I0011, W0702, R0903, R0904, R0912, R0913, R0914
 
 
 [REPORTS]
@@ -50,7 +52,7 @@ disable=C0103, C0111, W0702, R0904, R0912, R0913, R0914
 output-format=text
 
 # Include message's id in output
-include-ids=no
+include-ids=yes
 
 # Put messages in a separate file for each module / package specified on the
 # command line instead of printing them on stdout. Reports (if any) will be

@@ -5,6 +5,7 @@ Copyright (c) 2014 F-Secure
 See LICENSE for details
 """
 
+from __future__ import print_function
 import copy
 import datetime
 import errno
@@ -23,7 +24,6 @@ import sys
 import time
 from email.utils import parsedate
 from psycopg2.extras import RealDictCursor
-from requests import ConnectionError
 from threading import Thread
 
 try:
@@ -35,7 +35,7 @@ except ImportError: # Support Py3k
     from http.server import HTTPServer, SimpleHTTPRequestHandler # pylint: disable=F0401
 
 try:
-    from systemd import daemon
+    from systemd import daemon  # pylint: disable=F0401
 except:
     daemon = None
 
@@ -44,7 +44,7 @@ syslog_format_str = '%(name)s %(levelname)s: %(message)s'
 
 logging.basicConfig(level=logging.DEBUG, format=format_str)
 
-class TimeoutError(Exception):
+class PglookoutTimeout(Exception):
     pass
 
 def get_iso_timestamp(fetch_time=None):
@@ -144,10 +144,11 @@ class PgLookout(object):
                                                      self.log)
         self.own_db = self.config.get("own_db")
         # the levelNames hack is needed for Python2.6
+        log_level_name = self.config.get("log_level", "DEBUG")
         if sys.version_info[0] >= 3:
-            self.log_level = getattr(logging, self.config.get("log_level", "DEBUG"))
+            self.log_level = getattr(logging, log_level_name)
         else:
-            self.log_level = logging._levelNames[self.config.get("log_level", "DEBUG")] # pylint: disable=W0212
+            self.log_level = logging._levelNames[log_level_name] # pylint: disable=W0212,E1101
         try:
             self.log.setLevel(self.log_level)
             if self.cluster_monitor:
@@ -503,7 +504,7 @@ def wait_select(conn, timeout=10.0):
         except select.error as error:
             if error[0] != errno.EINTR:
                 raise
-    raise TimeoutError("timed out in wait_select")
+    raise PglookoutTimeout("timed out in wait_select")
 
 class ClusterMonitor(Thread):
     def __init__(self, config, cluster_state, observer_state, create_alert_file):
@@ -557,7 +558,7 @@ class ClusterMonitor(Thread):
                                hostname, time_diff, response.json()) # pylint: disable=E1103
                 return
             result.update(response.json()) # pylint: disable=E1103
-        except ConnectionError as ex:
+        except requests.ConnectionError as ex:
             self.log.warning("%s (%s) fetching state from observer: %r, %r",
                              ex.__class__.__name__, ex, hostname, fetch_uri)
             result['connection'] = False
@@ -599,7 +600,7 @@ class ClusterMonitor(Thread):
             c.execute(query)
             wait_select(c.connection)
             f_result = c.fetchone()
-        except (TimeoutError, psycopg2.OperationalError, psycopg2.InterfaceError):
+        except (PglookoutTimeout, psycopg2.OperationalError, psycopg2.InterfaceError):
             self.log.exception("Problem with hostname: %r, closing connection", hostname)
             db_conn.close()
             self.db_conns[hostname] = None

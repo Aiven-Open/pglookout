@@ -3,18 +3,16 @@ long_ver = $(shell git describe --long 2>/dev/null || echo $(short_ver)-0-unknow
 
 all: py-egg
 
+PYTHON ?= python
 PYLINT_DIRS = pglookout/ test/
 
 test: pylint unittest
 
 unittest:
-	PYTHONPATH=test/ nosetests --nologcapture --nocapture test/
-
-unittest3:
-	PYTHONPATH=test/ nosetests --nologcapture --nocapture test/
+	$(PYTHON) -m pytest -vv test/
 
 pylint:
-	pylint --rcfile .pylintrc $(PYLINT_DIRS)
+	$(PYTHON) -m pylint --rcfile .pylintrc $(PYLINT_DIRS)
 
 clean:
 	$(RM) -r *.egg-info/ build/ dist/
