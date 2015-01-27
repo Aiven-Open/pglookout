@@ -9,7 +9,6 @@ from __future__ import print_function
 import copy
 import datetime
 import errno
-import json
 import logging
 import logging.handlers
 import os
@@ -33,6 +32,14 @@ try:
 except ImportError: # Support Py3k
     from socketserver import ThreadingMixIn # pylint: disable=F0401
     from http.server import HTTPServer, SimpleHTTPRequestHandler # pylint: disable=F0401
+
+# Prefer simplejson over json as on Python2.6 json does not play together
+# nicely with other libraries as it loads strings in unicode and for example
+# SysLogHandler does not like getting syslog facility as unicode string.
+try:
+    import simplejson as json
+except ImportError:
+    import json
 
 try:
     from systemd import daemon  # pylint: disable=F0401

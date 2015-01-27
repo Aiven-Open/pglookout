@@ -6,10 +6,14 @@ See LICENSE for details
 """
 
 from __future__ import print_function
-import json
 import os
 import sys
 import time
+
+try:
+    import simplejson as json
+except ImportError:
+    import json
 
 def main(args=None):
     if args is None:
