@@ -11,7 +11,7 @@ Source1:        pglookout.unit
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 BuildRequires:  python-devel
 BuildRequires:  python-distribute
-BuildRequires:  python-nose
+BuildRequires:  pytest
 Requires:       python-psycopg2, python-requests, python-setuptools
 Requires(pre):  shadow-utils
 BuildArch:      noarch
@@ -40,7 +40,7 @@ python setup.py install -O1 --skip-build --prefix=%{_prefix} --root=%{buildroot}
 %{__install} -m0644 %{SOURCE1} ${RPM_BUILD_ROOT}/usr/lib/systemd/system/pglookout.service
 
 %check
-python setup.py test
+make test
 
 %files
 /usr/lib/systemd/system/*
