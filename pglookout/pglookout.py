@@ -502,7 +502,7 @@ def wait_select(conn, timeout=10.0):
             if error.errno != errno.EINTR:
                 raise
         except select.error as error:
-            if error[0] != errno.EINTR:
+            if error[0] != errno.EINTR:  # pylint: disable=W0713
                 raise
     raise PglookoutTimeout("timed out in wait_select")
 
