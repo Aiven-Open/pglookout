@@ -20,6 +20,7 @@ clean:
 
 deb:
 	cp debian/changelog.in debian/changelog
+	dch -v $(long_ver) "Automatically built package"
 	dpkg-buildpackage -A -uc -us
 
 rpm:
