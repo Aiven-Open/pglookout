@@ -1,0 +1,6 @@
+*~
+*.pyc
+*.pyo
+__pycache__/
+build/
+pglookout.egg-info/
