@@ -11,7 +11,7 @@ to promote a new master in case the previous one goes missing.
 
 pglookout supports two different node types, ones that are installed on the
 db nodes themselves, and observer nodes that can be installed anywhere.  The
-purpose of the pglookout nodes on the DB nodes is to monitor the replication
+purpose of pglookout on the DB nodes is to monitor the replication
 status of the cluster and act accordingly, the observers have a more limited
 remit: they just observe the cluster status to give another viewpoint to the
 cluster state. In general it is recommended that you run the cluster
