@@ -112,7 +112,7 @@ installation.
    PgBouncer (or other poolers) traffic, or changes in PL/Proxy configuration.
 
    You should try to run the failover script you provide with pglookout's
-   user priviledges to see that it does indeed work.
+   user privileges to see that it does indeed work.
 
 5. Now copy the same ``pglookout.json`` configuration to the slave
    and possible observer nodes but you need to edit the configuration
@@ -278,23 +278,28 @@ true as well)
 Determines syslog log facility. (requires syslog to be true as well)
 
 
-Vulnerability reporting
-=======================
-
-If you would like to report a vulnerability or have a security concern on
-pglookout, please contact hannu.valtonen@ohmu.fi
-
-
-Copyright
-=========
-
-Copyright (C) 2015 Ohmu Ltd
-Copyright (C) 2014 F-Secure
-
-
 License
 =======
 
 pglookout is licensed under the Apache License, Version 2.0. Full license
 text is available in the ``LICENSE`` file and at
 http://www.apache.org/licenses/LICENSE-2.0.txt
+
+
+Credits
+=======
+
+pglookout was created by Hannu Valtonen <hannu.valtonen@ohmu.fi> for
+F-Secure and is now maintained by Ohmu Ltd's hackers <opensource@ohmu.fi>.
+
+Recent contributors are listed on the GitHub project page,
+https://github.com/ohmu/pglookout/graphs/contributors
+
+
+Contact
+=======
+
+Bug reports and patches are very welcome, please post them as GitHub issues
+and pull requests at https://github.com/ohmu/pglookout .  Any possible
+vulnerabilities or other serious issues should be reported directly to the
+maintainers <opensource@ohmu.fi>.

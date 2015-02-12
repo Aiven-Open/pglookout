@@ -1,8 +1,11 @@
 """
-pglookout
+pglookout tests
 
+Copyright (c) 2015 Ohmu Ltd
 Copyright (c) 2014 F-Secure
-See LICENSE for details
+
+This file is under the Apache License, Version 2.0.
+See the file `LICENSE` for details.
 """
 
 from pglookout.pglookout import PgLookout, parse_iso_datetime, get_iso_timestamp
