@@ -70,7 +70,7 @@ and eventually after the setup section, you can just run::
 
 Python/Other::
 
-  easy_install dist/pglookout-1.0.0-py2.7.egg
+  easy_install dist/pglookout-1.1.0-py2.7.egg
 
 On Debian/Other systems it is recommended that you run pglookout within
 a supervisord (http://supervisord.org) Process control system.

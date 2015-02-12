@@ -1,0 +1,17 @@
+pglookout 1.1.0 (2015-02-14)
+============================
+
+* Add support for observers to participate simultaneously in multiple replication clusters, allowing observers to be shared across replication clusters
+* Improved setup and installation documentation
+* Add Travis CI tests for Python (2.6, 2.7, 3.3 and 3.4)
+* Add RPM packaging
+* Add systemd support
+* Compatibility fixes for Python3/PyPy
+* The pglookout JSON state file has been renamed from json_state_file to pglookout_state.json
+* general bug fixes
+
+
+pglookout 1.0.0 (2014-10-14)
+============================
+
+* Initial release
