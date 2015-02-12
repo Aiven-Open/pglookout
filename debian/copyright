@@ -1,9 +1,10 @@
 Format: http://dep.debian.net/deps/dep5
 Upstream-Name: pglookout
-Source: https://github.com/F-Secure/pglookout/
+Source: https://github.com/ohmu/pglookout/
 
 Files: *
-Copyright: 2014 F-Secure <opensource@f-secure.com>
+Copyright: 2015, Ohmu Ltd <opensource@ohmu.fi>
+           2014, F-Secure <opensource@f-secure.com>
 License: Apache-2.0
 
 License: Apache-2.0

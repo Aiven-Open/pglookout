@@ -1,8 +1,11 @@
 """
-pglookout
+pglookout tests
 
+Copyright (c) 2015 Ohmu Ltd
 Copyright (c) 2014 F-Secure
-See LICENSE for details
+
+This file is under the Apache License, Version 2.0.
+See the file `LICENSE` for details.
 """
 
 from pglookout.pglookout import PgLookout, parse_iso_datetime, get_iso_timestamp
@@ -235,7 +238,7 @@ class TestPgLookout(TestCase):
                                     pg_is_in_recovery=False, connection=True, replication_time_lag=0.0)
         self.pglookout.check_cluster_state()
         self.assertEqual(len(self.pglookout.connected_master_nodes), 1)
-        self.assertEqual(self.pglookout.connected_master_nodes.keys()[0], 'old_master')
+        assert 'old_master' in self.pglookout.connected_master_nodes
 
     def test_failover_no_connections(self):
         self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False)

@@ -1,8 +1,11 @@
 """
-pglookout
+pglookout - replication monitoring and failover daemon
 
+Copyright (c) 2015 Ohmu Ltd
 Copyright (c) 2014 F-Secure
-See LICENSE for details
+
+This file is under the Apache License, Version 2.0.
+See the file `LICENSE` for details.
 """
 
 from __future__ import print_function
@@ -370,7 +373,7 @@ class PgLookout(object):
                          furthest_along_host, known_replication_positions)
 
         total_observers = len(self.connected_observer_nodes) + len(self.disconnected_observer_nodes)
-        # +1 in the calcaulation comes from the master node
+        # +1 in the calculation comes from the master node
         total_amount_of_nodes = len(standby_nodes) + 1 - len(self.never_promote_these_nodes) + total_observers
         size_of_needed_majority = total_amount_of_nodes * 0.5
         size_of_known_state = len(known_replication_positions) + len(self.connected_observer_nodes)
