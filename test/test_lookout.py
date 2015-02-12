@@ -219,6 +219,24 @@ class TestPgLookout(TestCase):
         self.assertEqual(self.pglookout.execute_external_command.call_count, 0)
         self.assertTrue(self.pglookout.replication_lag_over_warning_limit) # we keep the warning on
 
+    def test_cluster_state_when_observer_has_also_non_members_of_our_current_cluster(self):
+        self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=True)
+
+        # We will make our own node to be the furthest along so we get considered for promotion
+        self._add_db_to_cluster_state("own_db", pg_last_xlog_receive_location="2/aaaaaaaa",
+                                      pg_is_in_recovery=True, connection=True, replication_time_lag=130.0)
+        self.pglookout.own_db = "own_db"
+
+        self._add_to_observer_state("observer", "old_master", pg_is_in_recovery=False, connection=False,
+                                    db_time=datetime.datetime(year=2014, month=1, day=1))
+        self._add_to_observer_state("observer", "own_db", pg_last_xlog_receive_location="2/aaaaaaaa",
+                                    pg_is_in_recovery=True, connection=False, replication_time_lag=130.0)
+        self._add_to_observer_state("observer", "some_other_cluster", pg_last_xlog_receive_location="3/aaaaaaaa",
+                                    pg_is_in_recovery=False, connection=True, replication_time_lag=0.0)
+        self.pglookout.check_cluster_state()
+        self.assertEqual(len(self.pglookout.connected_master_nodes), 1)
+        self.assertEqual(self.pglookout.connected_master_nodes.keys()[0], 'old_master')
+
     def test_failover_no_connections(self):
         self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False)
 

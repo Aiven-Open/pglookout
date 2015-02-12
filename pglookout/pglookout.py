@@ -212,6 +212,11 @@ class PgLookout(object):
             else:
                 disconnected_observer_nodes[observer_name] = state.get("fetch_time")
             for host, db_state in state.items():
+                if host not in cluster_state:
+                    # A single observer can observe multiple different replication clusters.
+                    # Ignore data on nodes that don't belong in our own cluster
+                    self.log.debug("Ignoring node: %r since it does not belong into our own replication cluster.", host)
+                    continue
                 if isinstance(db_state, dict): # other keys are "connection" and "fetch_time"
                     own_fetch_time = parse_iso_datetime(cluster_state.get(host, {"fetch_time": get_iso_timestamp(datetime.datetime(year=2000, month=1, day=1))})['fetch_time']) # pylint: disable=C0301
                     observer_fetch_time = parse_iso_datetime(db_state['fetch_time'])
