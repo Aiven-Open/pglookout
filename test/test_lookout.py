@@ -238,7 +238,7 @@ class TestPgLookout(TestCase):
                                     pg_is_in_recovery=False, connection=True, replication_time_lag=0.0)
         self.pglookout.check_cluster_state()
         self.assertEqual(len(self.pglookout.connected_master_nodes), 1)
-        self.assertEqual(self.pglookout.connected_master_nodes.keys()[0], 'old_master')
+        assert 'old_master' in self.pglookout.connected_master_nodes
 
     def test_failover_no_connections(self):
         self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False)
