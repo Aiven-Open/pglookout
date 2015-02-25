@@ -40,7 +40,7 @@ except ImportError: # Support Py3k
 # nicely with other libraries as it loads strings in unicode and for example
 # SysLogHandler does not like getting syslog facility as unicode string.
 try:
-    import simplejson as json
+    import simplejson as json  # pylint: disable=F0401
 except ImportError:
     import json
 
