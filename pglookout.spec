@@ -5,7 +5,7 @@ Url:            http://github.com/ohmu/pglookout
 Summary:        PostgreSQL replication monitoring and failover daemon (Python 2)
 License:        ASL 2.0
 Source0:        pglookout-rpm-src.tar.gz
-Requires:       python-psycopg2, python-requests, python-setuptools, systemd
+Requires:       python-psycopg2, python-requests, python-setuptools, systemd-python, systemd
 Requires(pre):  shadow-utils
 BuildRequires:  pytest, pylint, %{requires}
 BuildArch:      noarch
@@ -18,7 +18,7 @@ This is the Python 2 package of pglookout.
 %if %{?python3_sitelib:1}0
 %package -n python3-pglookout
 Summary:        PostgreSQL replication monitoring and failover daemon (Python 3)
-Requires:       python3-psycopg2, python3-requests, python3-setuptools, systemd
+Requires:       python3-psycopg2, python3-requests, python3-setuptools, systemd-python3, systemd
 Requires(pre):  shadow-utils
 BuildRequires:  python3-pytest, python3-pylint, %{requires}
 BuildArch:      noarch
@@ -48,6 +48,8 @@ mv %{buildroot}%{_bindir}/pglookout %{buildroot}%{_bindir}/pglookout-py3
 sed -e "s!/usr/bin/pglookout /var/!%{_bindir}/pglookout-py3 %{_localstatedir}/!g" pglookout.unit \
     > %{buildroot}%{_datadir}/pglookout/pglookout-py3.service
 %endif
+
+sed -e "s@#!/bin/python@#!%{_bindir}/python@" -i %{buildroot}%{_bindir}/*
 
 %check
 make test PYTHON=python2
