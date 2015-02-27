@@ -1,32 +1,17 @@
-%{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print get_python_lib()")}
-
 Name:           pglookout
 Version:        %{major_version}
 Release:        %{minor_version}%{?dist}
 Url:            http://github.com/ohmu/pglookout
 Summary:        PostgreSQL replication monitoring and failover daemon
-License:        Apache V2
+License:        ASL 2.0
 Source0:        pglookout-rpm-src.tar.gz
-Source1:        pglookout.unit
-BuildRoot:      %{_tmppath}/%{name}-%{version}-build
-BuildRequires:  python-devel
-BuildRequires:  python-distribute
-BuildRequires:  pytest
-Requires:       python-psycopg2, python-requests, python-setuptools
+Requires:       python-psycopg2, python-requests, python-setuptools, systemd
 Requires(pre):  shadow-utils
+BuildRequires:  pytest, pylint, %{requires}
 BuildArch:      noarch
 
 %description
 pglookout is a PostgreSQL replication monitoring and failover daemon.
-
-%pre
-mkdir -p /var/lib/pglookout
-getent group pglookout >/dev/null || groupadd -r pglookout
-getent passwd pglookout >/dev/null || \
-    useradd -r -g pglookout -d /var/lib/pglookout -s /usr/bin/sh \
-	    -c "pglookout account" pglookout
-chown pglookout.pglookout /var/lib/pglookout
-exit 0
 
 %prep
 %setup -q -n pglookout
@@ -36,22 +21,29 @@ python setup.py build
 
 %install
 python setup.py install -O1 --skip-build --prefix=%{_prefix} --root=%{buildroot}
-%{__mkdir_p} ${RPM_BUILD_ROOT}/usr/lib/systemd/system
-%{__install} -m0644 %{SOURCE1} ${RPM_BUILD_ROOT}/usr/lib/systemd/system/pglookout.service
+%{__install} -Dm0644 pglookout.unit %{buildroot}%{_unitdir}/pglookout.service
+%{__mkdir_p} %{buildroot}%{_localstatedir}/lib/pglookout
 
 %check
 make test
 
+%pre
+getent group pglookout >/dev/null || groupadd -r pglookout
+getent passwd pglookout >/dev/null || \
+    useradd -r -g pglookout -d %{_localstatedir}/lib/pglookout -s /usr/bin/sh \
+	    -c "pglookout account" pglookout
+
 %files
-/usr/lib/systemd/system/*
-
 %defattr(-,root,root,-)
-
 %doc LICENSE README.rst pglookout.json
+%{_unitdir}/pglookout.service
 %{_bindir}/pglookout*
-
 %{python_sitelib}/*
+%attr(0755, pglookout, pglookout) %{_localstatedir}/lib/pglookout
 
 %changelog
-* Tue Dec 16 2014 hannu.valtonen@ohmu.fi
+* Fri Feb 27 2015 Oskari Saarenmaa <os@ohmu.fi> - 1.1.0
+- Refactored
+
+* Tue Dec 16 2014 Hannu Valtonen <hannu.valtonen@ohmu.fi> - 1.0.0
 - Initial RPM package spec
