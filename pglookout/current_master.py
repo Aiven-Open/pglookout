@@ -14,7 +14,7 @@ import sys
 import time
 
 try:
-    import simplejson as json
+    import simplejson as json  # pylint: disable=F0401
 except ImportError:
     import json
 
