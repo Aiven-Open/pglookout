@@ -38,4 +38,4 @@ build-dep-fed:
 	sudo yum -y install python-devel python-pytest python-psycopg2 python3-psycopg2 python-mock
 
 build-dep-deb:
-	sudo apt-get install build-essential devscripts python-setuptools python-all
+	sudo apt-get install build-essential devscripts python-setuptools python-all python-psycopg2 python-requests dh-systemd
