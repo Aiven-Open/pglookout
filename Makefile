@@ -14,6 +14,9 @@ unittest:
 pylint:
 	$(PYTHON) -m pylint --rcfile .pylintrc $(PYLINT_DIRS)
 
+coverage:
+	$(PYTHON) -m pytest $(PYTEST_ARG) --cov-report term-missing --cov pglookout test/
+
 clean:
 	$(RM) -r *.egg-info/ build/ dist/
 	$(RM) ../pglookout_* test-*.xml
@@ -33,3 +36,6 @@ rpm:
 
 build-dep-fed:
 	sudo yum -y install python-devel python-pytest python-psycopg2 python3-psycopg2 python-mock
+
+build-dep-deb:
+	sudo apt-get install build-essential devscripts python-setuptools python-all
