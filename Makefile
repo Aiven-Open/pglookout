@@ -12,7 +12,7 @@ unittest:
 	$(PYTHON) -m pytest -vv test/
 
 pylint:
-	$(PYTHON) -m pylint --rcfile .pylintrc $(PYLINT_DIRS)
+	$(PYTHON) -m pylint.lint --rcfile .pylintrc $(PYLINT_DIRS)
 
 coverage:
 	$(PYTHON) -m pytest $(PYTEST_ARG) --cov-report term-missing --cov pglookout test/
