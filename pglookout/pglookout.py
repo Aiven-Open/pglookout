@@ -513,11 +513,8 @@ def wait_select(conn, timeout=10.0):
                 select.select([], [conn.fileno()], [], min(timeout, time_left))
             else:
                 raise psycopg2.OperationalError("bad state from poll: %s" % state)
-        except OSError as error:
-            if error.errno != errno.EINTR:
-                raise
         except select.error as error:
-            if error[0] != errno.EINTR:  # pylint: disable=W0713
+            if error.args[0] != errno.EINTR:
                 raise
     raise PglookoutTimeout("timed out in wait_select")
 
