@@ -35,7 +35,12 @@ rpm:
 	$(RM) pglookout-rpm-src.tar.gz
 
 build-dep-fed:
-	sudo yum -y install python-devel python-pytest python-psycopg2 python3-psycopg2 python-mock
+	sudo yum -y install \
+		python-devel python3-devel pytest python3-pytest pylint python3-pylint \
+		python-mock python3-mock python-psycopg2 python3-psycopg2 \
+		python-requests python3-requests systemd-python systemd-python3
 
 build-dep-deb:
-	sudo apt-get install build-essential devscripts python-setuptools python-all python-psycopg2 python-requests dh-systemd
+	sudo apt-get install \
+		build-essential devscripts dh-systemd \
+		python-all python-setuptools python-psycopg2 python-requests
