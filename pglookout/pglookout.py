@@ -612,6 +612,9 @@ class ClusterMonitor(Thread):
             c.execute(query)
             wait_select(c.connection)
             f_result = c.fetchone()
+            if not f_result['pg_is_in_recovery']:
+                #  This is only run on masters to create txid traffic every db_poll_interval
+                c.execute("SELECT txid_current()")
         except (PglookoutTimeout, psycopg2.OperationalError, psycopg2.InterfaceError):
             self.log.exception("Problem with hostname: %r, closing connection", hostname)
             db_conn.close()
