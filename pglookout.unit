@@ -6,6 +6,7 @@ User=pglookout
 Group=pglookout
 Type=notify
 Restart=always
+ExecReload=/bin/kill -HUP $MAINPID
 ExecStart=/usr/bin/pglookout /var/lib/pglookout/pglookout.json
 WorkingDirectory=/var/lib/pglookout
 
