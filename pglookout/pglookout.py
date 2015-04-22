@@ -411,7 +411,7 @@ class PgLookout(object):
 
     def execute_external_command(self, command):
         self.log.warning("Executing external command: %r", command)
-        return_code = 0
+        return_code, output = 0, ""
         try:
             output = subprocess.check_call(command)
         except subprocess.CalledProcessError as err:
