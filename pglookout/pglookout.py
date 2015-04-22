@@ -499,7 +499,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
         else:
             self.send_response(404)
 
-def wait_select(conn, timeout=10.0):
+def wait_select(conn, timeout=5.0):
     end_time = time.time() + timeout
     while time.time() < end_time:
         time_left = end_time - time.time()
