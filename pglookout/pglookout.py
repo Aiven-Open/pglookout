@@ -144,6 +144,8 @@ class PgLookout(object):
         try:
             with open(self.config_path) as fp:
                 self.config = json.load(fp)
+                if self.cluster_monitor:
+                    self.cluster_monitor.config = copy.deepcopy(self.config)
         except:
             self.log.exception("Invalid JSON config, exiting")
             sys.exit(0)
@@ -528,7 +530,6 @@ class ClusterMonitor(Thread):
         self.config = config
         self.create_alert_file = create_alert_file
         self.db_conns = {}
-        self.observers = self.config.get("observers", {})
         self.session = requests.Session()
         if self.config.get("syslog"):
             self.syslog_handler = set_syslog_handler(self.config.get("syslog_address", "/dev/log"),
@@ -537,7 +538,9 @@ class ClusterMonitor(Thread):
         self.log.debug("Initialized ClusterMonitor with: %r", cluster_state)
 
     def _connect_to_db(self, hostname, dsn):
-        conn = None
+        conn = self.db_conns.get(hostname)
+        if conn:
+            return conn
         try:
             self.log.debug("Connecting to hostname: %r", hostname)
             conn = psycopg2.connect(dsn=dsn, async=True)
@@ -590,7 +593,14 @@ class ClusterMonitor(Thread):
         self.log.debug("Observer: %r state was: %r, took: %.4fs to fetch",
                        hostname, result, time.time() - start_time)
 
-    def _connect_to_cluster_nodes(self):
+    def connect_to_cluster_nodes_and_cleanup_old_nodes(self):
+        leftover_host_conns = set(self.db_conns) - set(self.config.get("remote_conns", {}))
+        for leftover_conn_hostname in leftover_host_conns:
+            self.log.debug("Removing leftover state for: %r", leftover_conn_hostname)
+            self.db_conns.pop(leftover_conn_hostname)
+            self.cluster_state.pop(leftover_conn_hostname, "")
+            self.observer_state.pop(leftover_conn_hostname, "")
+        #  Making sure we have a connection to all currently configured db hosts
         for hostname, connect_string in self.config.get('remote_conns', {}).items():
             self._connect_to_db(hostname, dsn=connect_string)
 
@@ -650,12 +660,12 @@ class ClusterMonitor(Thread):
             self.cluster_state[hostname] = result
 
     def run(self):
-        self._connect_to_cluster_nodes()
         while self.running:
             try:
+                self.connect_to_cluster_nodes_and_cleanup_old_nodes()
                 for hostname, db_conn in self.db_conns.items():
                     self.standby_status_query(hostname, db_conn)
-                for hostname, uri in self.observers.items():
+                for hostname, uri in self.config.get('observers', {}).items():
                     self.fetch_observer_state(hostname, uri)
             except:
                 self.log.exception("Problem in ClusterMonitor")
