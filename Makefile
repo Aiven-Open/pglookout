@@ -44,3 +44,7 @@ build-dep-deb:
 	sudo apt-get install \
 		build-essential devscripts dh-systemd \
 		python-all python-setuptools python-psycopg2 python-requests
+
+pep8:
+	$(PYTHON) -m pep8 --ignore=E501,E123 $(PYLINT_DIRS)
+

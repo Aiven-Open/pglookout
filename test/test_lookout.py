@@ -10,13 +10,14 @@ See the file `LICENSE` for details.
 
 from pglookout.pglookout import PgLookout, parse_iso_datetime, get_iso_timestamp
 try:
-    from mock import Mock # pylint: disable=F0401
-except: # py3k import location
-    from unittest.mock import Mock # pylint: disable=F0401,E0611
+    from mock import Mock  # pylint: disable=F0401
+except:  # py3k import location
+    from unittest.mock import Mock  # pylint: disable=F0401,E0611
 from unittest import TestCase
 import datetime
 import os
 import tempfile
+
 
 def _create_db_node_state(pg_last_xlog_receive_location=None, pg_is_in_recovery=True,
                           connection=True, replication_time_lag=None, fetch_time=None,
@@ -46,6 +47,7 @@ class TestClusterMonitor(TestCase):
 
     def tearDown(self):
         self.pglookout.cluster_monitor._connect_to_db = self.original_connect_to_db   # pylint: disable=W0212
+
 
 class TestPgLookout(TestCase):
     def setUp(self):
@@ -188,7 +190,7 @@ class TestPgLookout(TestCase):
         self.pglookout.replication_lag_over_warning_limit = True
         self.pglookout.check_cluster_state()
         self.assertEqual(self.pglookout.execute_external_command.call_count, 0)
-        self.assertTrue(self.pglookout.replication_lag_over_warning_limit) # we keep the warning on
+        self.assertTrue(self.pglookout.replication_lag_over_warning_limit)  # we keep the warning on
 
     def test_check_cluster_do_failover_two_slaves_when_the_one_ahead_can_never_be_promoted(self):
         self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False,
@@ -217,7 +219,7 @@ class TestPgLookout(TestCase):
 
         self.pglookout.check_cluster_state()
         self.assertEqual(self.pglookout.execute_external_command.call_count, 0)
-        self.assertTrue(self.pglookout.replication_lag_over_warning_limit) # we keep the warning on
+        self.assertTrue(self.pglookout.replication_lag_over_warning_limit)  # we keep the warning on
 
     def test_failover_over_replication_lag_with_one_observer_one_slave_no_connections(self):
         self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False)
@@ -234,7 +236,7 @@ class TestPgLookout(TestCase):
         self.pglookout.observer_state["observer"]['connection'] = False
         self.pglookout.check_cluster_state()
         self.assertEqual(self.pglookout.execute_external_command.call_count, 0)
-        self.assertTrue(self.pglookout.replication_lag_over_warning_limit) # we keep the warning on
+        self.assertTrue(self.pglookout.replication_lag_over_warning_limit)  # we keep the warning on
 
     def test_cluster_state_when_observer_has_also_non_members_of_our_current_cluster(self):
         self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=True)
@@ -267,7 +269,7 @@ class TestPgLookout(TestCase):
                                       pg_is_in_recovery=True, connection=False, replication_time_lag=130.0)
         self.pglookout.check_cluster_state()
         self.assertEqual(self.pglookout.execute_external_command.call_count, 0)
-        self.assertTrue(self.pglookout.replication_lag_over_warning_limit) # we keep the warning on
+        self.assertTrue(self.pglookout.replication_lag_over_warning_limit)  # we keep the warning on
 
     def test_failover_master_two_slaves_one_observer_no_connection_between_slaves(self):
         self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False,
@@ -291,7 +293,7 @@ class TestPgLookout(TestCase):
         self.pglookout.check_cluster_state()
         self.assertEqual(self.pglookout.execute_external_command.call_count, 1)
 
-        self.assertFalse(self.pglookout.replication_lag_over_warning_limit) # we keep the warning on
+        self.assertFalse(self.pglookout.replication_lag_over_warning_limit)  # we keep the warning on
 
     def test_failover_master_one_slave_one_observer_no_connections(self):
         self.pglookout.own_db = "own"
@@ -305,7 +307,7 @@ class TestPgLookout(TestCase):
                                       pg_is_in_recovery=True, connection=True, replication_time_lag=40.0)
 
         self.pglookout.check_cluster_state()
-        self.assertTrue(self.pglookout.replication_lag_over_warning_limit) # we keep the warning on
+        self.assertTrue(self.pglookout.replication_lag_over_warning_limit)  # we keep the warning on
         self.assertEqual(self.pglookout.execute_external_command.call_count, 0)
 
         # Add observer state
@@ -320,9 +322,9 @@ class TestPgLookout(TestCase):
 
         # No failover yet
         self.assertEqual(self.pglookout.execute_external_command.call_count, 0)
-        self.assertTrue(self.pglookout.replication_lag_over_warning_limit) # we keep the warning on
+        self.assertTrue(self.pglookout.replication_lag_over_warning_limit)  # we keep the warning on
 
-        #observer state
+        # observer state
         self._add_to_observer_state("observer", "old_master", pg_is_in_recovery=False, connection=False,
                                     db_time=datetime.datetime(year=2014, month=1, day=1))
         self._add_to_observer_state("observer", "own", pg_last_xlog_receive_location="2/aaaaaaaa",
@@ -363,19 +365,19 @@ class TestPgLookout(TestCase):
                                            'db_time': '2014-08-28T14:26:51.067084+00:00Z'},
                          '10.255.255.9': {'connection': False, 'fetch_time': '2014-08-28T14:26:51.068151Z'}}
         observer_state = {'10.255.255.11':
-                              {'connection': True, 'fetch_time': '2014-08-28T14:26:51.069891Z',
-                               '10.255.255.10': {'fetch_time': '2014-08-28T14:26:47.104849Z',
-                                                 'pg_last_xlog_receive_location': '0/9000090',
-                                                 'pg_is_in_recovery': False,
-                                                 'pg_last_xact_replay_timestamp': '2014-08-28T14:05:43.577357+00:00Z',
-                                                 'connection': True, 'pg_last_xlog_replay_location': '0/9000090',
-                                                 'replication_time_lag': 1263.528544,
-                                                 'db_time': '2014-08-28T14:26:47.105901+00:00Z'},
-                               '10.255.255.9': {'fetch_time': '2014-08-28T14:26:47.107115Z',
-                                                'pg_last_xlog_receive_location': None,
-                                                'pg_is_in_recovery': False, 'pg_last_xact_replay_timestamp': None,
-                                                'connection': False, 'pg_last_xlog_replay_location': None,
-                                                'db_time': '2014-08-28T14:06:15.172820+00:00Z'}}}
+                          {'connection': True, 'fetch_time': '2014-08-28T14:26:51.069891Z',
+                           '10.255.255.10': {'fetch_time': '2014-08-28T14:26:47.104849Z',
+                                             'pg_last_xlog_receive_location': '0/9000090',
+                                             'pg_is_in_recovery': False,
+                                             'pg_last_xact_replay_timestamp': '2014-08-28T14:05:43.577357+00:00Z',
+                                             'connection': True, 'pg_last_xlog_replay_location': '0/9000090',
+                                             'replication_time_lag': 1263.528544,
+                                             'db_time': '2014-08-28T14:26:47.105901+00:00Z'},
+                           '10.255.255.9': {'fetch_time': '2014-08-28T14:26:47.107115Z',
+                                            'pg_last_xlog_receive_location': None,
+                                            'pg_is_in_recovery': False, 'pg_last_xact_replay_timestamp': None,
+                                            'connection': False, 'pg_last_xlog_replay_location': None,
+                                            'db_time': '2014-08-28T14:06:15.172820+00:00Z'}}}
         master_host, _, standby_nodes = self.pglookout.create_node_map(cluster_state, observer_state)
         self.assertEqual(master_host, "10.255.255.10")
         self.assertEqual(standby_nodes, {})
