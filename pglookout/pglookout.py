@@ -287,7 +287,10 @@ class PgLookout(object):
 
         if master_host != self.current_master:
             self.log.info("New master node detected: old: %r new: %r: %r", self.current_master, master_host, master_node)
+            previous_master = self.current_master
             self.current_master = master_host
+            if self.own_db and previous_master and self.config.get("autofollow") and self.own_db != master_host:
+                self.start_following_new_master(master_host)
 
         own_state = self.cluster_state.get(self.own_db)
 
@@ -416,6 +419,34 @@ class PgLookout(object):
                     self.delete_alert_file("replication_delay_warning")
         else:
             self.log.warning("Nothing to do since node: %r is the furthest along", furthest_along_host)
+
+    def modify_recovery_conf_to_point_at_new_master_host(self, new_master_host):
+        path_to_recovery_conf = os.path.join(self.config.get("pg_data_directory"), "recovery.conf")
+        with open(path_to_recovery_conf, "r") as fp:
+            old_recovery_conf_contents = fp.readlines()
+        with open(path_to_recovery_conf + "_temp", "w") as fp:
+            for line in old_recovery_conf_contents:
+                if line.startswith("primary_conninfo"):
+                    parts = []
+                    for part in line.split(" "):
+                        if not part.startswith("host"):
+                            parts.append(part)
+                        else:
+                            parts.append("host=%s" % new_master_host)
+                    line = ' '.join(parts)
+                fp.write(line)
+        os.rename(path_to_recovery_conf + "_temp", path_to_recovery_conf)
+
+    def start_following_new_master(self, new_master_host):
+        start_time = time.time()
+        start_command, stop_command = self.config.get("pg_start_command", "").split(" "), self.config.get("pg_stop_command", "").split(" ")
+        self.log.debug("Starting to follow new master: %r, will modify recovery.conf and stop/start PostgreSQL."
+                       "pg_stop_command: %r, pg_start_command: %r",
+                       new_master_host, start_command, stop_command)
+        self.execute_external_command(stop_command)
+        self.modify_recovery_conf_to_point_at_new_master_host(new_master_host)
+        self.execute_external_command(start_command)
+        self.log.debug("Started following new master: %r, took: %.2fs", new_master_host, time.time() - start_time)
 
     def execute_external_command(self, command):
         self.log.warning("Executing external command: %r", command)
