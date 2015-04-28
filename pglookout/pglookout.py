@@ -80,7 +80,7 @@ def parse_iso_datetime(value):
 
 def convert_xlog_location_to_offset(xlog_location):
     log_id, offset = xlog_location.split("/")
-    return int('ffffffff', 16) * int(log_id, 16) * int(offset, 16)
+    return int(log_id, 16) << 32 | int(offset, 16)
 
 
 def set_syslog_handler(syslog_address, syslog_facility, logger):
@@ -355,7 +355,11 @@ class PgLookout(object):
             now = datetime.datetime.utcnow()
             self.log.debug("conn: %r %r", node_state['connection'], now - parse_iso_datetime(node_state['fetch_time']))
             if node_state['connection'] and now - parse_iso_datetime(node_state['fetch_time']) < datetime.timedelta(seconds=20) and hostname not in self.never_promote_these_nodes:  # pylint: disable=C0301
-                known_replication_positions[convert_xlog_location_to_offset(node_state['pg_last_xlog_receive_location'])] = hostname  # pylint: disable=C0301
+                xlog_pos = convert_xlog_location_to_offset(node_state['pg_last_xlog_receive_location'])
+                if xlog_pos in known_replication_positions:
+                    known_replication_positions[xlog_pos].append(hostname)  # pylint: disable=C0301
+                else:
+                    known_replication_positions[xlog_pos] = [hostname]
         return known_replication_positions
 
     def _have_we_been_in_contact_with_the_master_within_the_failover_timeout(self):
@@ -379,17 +383,21 @@ class PgLookout(object):
         if not known_replication_positions:
             self.log.warning("No known replication positions, canceling failover consideration")
             return
-        furthest_along_host = known_replication_positions[max(known_replication_positions)]
+
+        #  We always pick the 0th one coming out of sort, so both standbys will pick the same node for promotion
+        furthest_along_host = min(known_replication_positions[max(known_replication_positions)])
         self.log.warning("Node that is furthest along is: %r, all replication positions were: %r",
                          furthest_along_host, known_replication_positions)
-
         total_observers = len(self.connected_observer_nodes) + len(self.disconnected_observer_nodes)
         # +1 in the calculation comes from the master node
         total_amount_of_nodes = len(standby_nodes) + 1 - len(self.never_promote_these_nodes) + total_observers
         size_of_needed_majority = total_amount_of_nodes * 0.5
-        size_of_known_state = len(known_replication_positions) + len(self.connected_observer_nodes)
+        amount_of_known_replication_positions = 0
+        for known_replication_position in known_replication_positions.values():
+            amount_of_known_replication_positions += len(known_replication_position)
+        size_of_known_state = amount_of_known_replication_positions + len(self.connected_observer_nodes)
         self.log.debug("Size of known state: %.2f, needed majority: %r, %r/%r", size_of_known_state,
-                       size_of_needed_majority, len(known_replication_positions), int(total_amount_of_nodes))
+                       size_of_needed_majority, amount_of_known_replication_positions, int(total_amount_of_nodes))
 
         if standby_nodes[furthest_along_host] == own_state:
             if os.path.exists(self.config.get("maintenance_mode_file", "/tmp/pglookout_maintenance_mode_file")):

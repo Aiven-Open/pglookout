@@ -435,6 +435,27 @@ class TestPgLookout(TestCase):
         self.assertEqual(master_host, "10.255.255.7")
         self.assertEqual(list(standby_nodes.keys())[0], "10.255.255.8")
 
+    def test_standbys_failover_equal_replication_positions(self):
+        self.pglookout.current_master = "192.168.57.180"
+        self.pglookout.own_db = "192.168.54.183"
+        now = get_iso_timestamp(datetime.datetime.utcnow())
+        self.pglookout.cluster_state = {'192.168.57.180': {'connection': False, 'fetch_time': now,
+                                                           'pg_last_xlog_receive_location': None, 'db_time': '2015-04-28T11:21:55.830432Z',
+                                                           'pg_is_in_recovery': False, 'replication_time_lag': 0.0,
+                                                           'pg_last_xlog_replay_location': None, 'pg_last_xact_replay_timestamp': None},
+                                        '192.168.63.4': {'connection': True, 'fetch_time': now,
+                                                         'pg_last_xlog_receive_location': '0/70004D8', 'db_time': now,
+                                                         'pg_is_in_recovery': True, 'replication_time_lag': 401.104655,
+                                                         'pg_last_xlog_replay_location': '0/70004D8',
+                                                         'pg_last_xact_replay_timestamp': '2015-04-28T11:21:56.098946+00:00Z'},
+                                        '192.168.54.183': {'connection': True, 'fetch_time': now,
+                                                           'pg_last_xlog_receive_location': '0/70004D8', 'db_time': now,
+                                                           'pg_is_in_recovery': True, 'replication_time_lag': 400.435871,
+                                                           'pg_last_xlog_replay_location': '0/70004D8',
+                                                           'pg_last_xact_replay_timestamp': '2015-04-28T11:21:56.098946+00:00Z'}}
+        self.pglookout.check_cluster_state()
+        self.assertEqual(self.pglookout.execute_external_command.call_count, 1)
+
     def tearDown(self):
         if os.path.exists(self.state_file_path):
             os.unlink(self.state_file_path)
