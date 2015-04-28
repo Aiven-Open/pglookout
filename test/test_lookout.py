@@ -377,7 +377,7 @@ class TestPgLookout(TestCase):
 
         with open(os.path.join(pg_data_dir, "recovery.conf"), "r") as fp:
             content = fp.read()
-            self.assertEqual(content, "standby_mode = 'on'\nprimary_conninfo = 'user=replication password=vjsh8l7sv4a902y1tsdz host=other port=5432 sslmode=prefer sslcompression=1 krbsrvname=postgres'\n")
+            self.assertEqual(content, "standby_mode = 'on'\nprimary_conninfo = 'user=replication password=vjsh8l7sv4a902y1tsdz host=other port=5432 sslmode=prefer sslcompression=1 krbsrvname=postgres'\nrecovery_target_timeline = 'latest'")
 
         self.assertEqual(self.pglookout.current_master, "other")
 

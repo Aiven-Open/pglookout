@@ -353,7 +353,6 @@ class PgLookout(object):
         known_replication_positions = {}
         for hostname, node_state in standby_nodes.items():
             now = datetime.datetime.utcnow()
-            self.log.debug("conn: %r %r", node_state['connection'], now - parse_iso_datetime(node_state['fetch_time']))
             if node_state['connection'] and now - parse_iso_datetime(node_state['fetch_time']) < datetime.timedelta(seconds=20) and hostname not in self.never_promote_these_nodes:  # pylint: disable=C0301
                 xlog_pos = convert_xlog_location_to_offset(node_state['pg_last_xlog_receive_location'])
                 if xlog_pos in known_replication_positions:
@@ -432,8 +431,11 @@ class PgLookout(object):
         path_to_recovery_conf = os.path.join(self.config.get("pg_data_directory"), "recovery.conf")
         with open(path_to_recovery_conf, "r") as fp:
             old_recovery_conf_contents = fp.readlines()
+        has_recovery_target_timeline = False
         with open(path_to_recovery_conf + "_temp", "w") as fp:
             for line in old_recovery_conf_contents:
+                if line.startswith("recovery_target_timeline"):
+                    has_recovery_target_timeline = True
                 if line.startswith("primary_conninfo"):
                     parts = []
                     for part in line.split(" "):
@@ -443,6 +445,10 @@ class PgLookout(object):
                             parts.append("host=%s" % new_master_host)
                     line = ' '.join(parts)
                 fp.write(line)
+            #  The timeline of the recovery.conf will require a higher timeline target
+            if not has_recovery_target_timeline:
+                fp.write("recovery_target_timeline = 'latest'")
+
         os.rename(path_to_recovery_conf + "_temp", path_to_recovery_conf)
 
     def start_following_new_master(self, new_master_host):
