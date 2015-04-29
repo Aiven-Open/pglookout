@@ -2,8 +2,8 @@
 Description=PostgreSQL replication monitoring and failover daemon
 
 [Service]
-User=pglookout
-Group=pglookout
+User=postgres
+Group=postgres
 Type=notify
 Restart=always
 ExecReload=/bin/kill -HUP $MAINPID
