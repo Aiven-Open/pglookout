@@ -7,8 +7,9 @@ python:
   - "3.4"
 
 install:
-  - "pip install pylint==1.3.1 pytest mock psycopg2 requests"
+  - "pip install pylint==1.3.1 pytest mock pep8 psycopg2 requests"
 
 script:
   - "(python -V 2>&1 | grep -qF 'Python 2.6') || make pylint"
+  - "make pep8"
   - "make unittest"
