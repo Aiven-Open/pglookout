@@ -53,7 +53,8 @@ class TestPgLookout(TestCase):
     def setUp(self):
         self.pglookout = PgLookout("pglookout.json")
         self.pglookout.execute_external_command = Mock()
-        self.state_file_path = tempfile.gettempdir() + os.sep + "state_file"
+        self.temp_dir = tempfile.mkdtemp()
+        self.state_file_path = os.path.join(self.temp_dir, "state_file")
 
     def test_parse_iso_datetime(self):
         date = datetime.datetime.utcnow()
@@ -345,6 +346,41 @@ class TestPgLookout(TestCase):
         self.pglookout.check_cluster_state()
         self.assertEqual(self.pglookout.current_master, "master")
 
+    def test_two_slave_failover_and_autofollow(self):
+        self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False,
+                                      fetch_time=datetime.datetime(year=2014, month=1, day=1))
+        # We will make our own node to be the furthest from master so we don't get considered for promotion
+        self._add_db_to_cluster_state("own", pg_last_xlog_receive_location="1/aaaaaaaa",
+                                      pg_is_in_recovery=True, connection=False, replication_time_lag=130.0)
+        self.pglookout.own_db = "own"
+        self._add_db_to_cluster_state("other", pg_last_xlog_receive_location="2/aaaaaaaa",
+                                      pg_is_in_recovery=True, connection=False, replication_time_lag=130.0)
+
+        self.pglookout.check_cluster_state()
+        self.assertTrue(self.pglookout.replication_lag_over_warning_limit)  # we keep the warning on
+        self.assertEqual(self.pglookout.execute_external_command.call_count, 0)
+        self.assertEqual(self.pglookout.current_master, "old_master")
+
+        self._add_db_to_cluster_state("other", pg_last_xlog_receive_location="2/aaaaaaaa",
+                                      pg_is_in_recovery=False, connection=True, replication_time_lag=0.0)
+
+        pg_data_dir = os.path.join(self.temp_dir + os.sep + "test_pgdata")
+        os.makedirs(pg_data_dir)
+        old_recovery_conf = "standby_mode = 'on'\nprimary_conninfo = 'user=replication password=vjsh8l7sv4a902y1tsdz host=old_master port=5432 sslmode=prefer sslcompression=1 krbsrvname=postgres'\n"
+        with open(os.path.join(pg_data_dir, "recovery.conf"), "w") as fp:
+            fp.write(old_recovery_conf)
+
+        self.pglookout.config['pg_data_directory'] = pg_data_dir
+        self.pglookout.config['autofollow'] = True
+
+        self.pglookout.check_cluster_state()
+
+        with open(os.path.join(pg_data_dir, "recovery.conf"), "r") as fp:
+            content = fp.read()
+            self.assertEqual(content, "standby_mode = 'on'\nprimary_conninfo = 'user=replication password=vjsh8l7sv4a902y1tsdz host=other port=5432 sslmode=prefer sslcompression=1 krbsrvname=postgres'\nrecovery_target_timeline = 'latest'\n")
+
+        self.assertEqual(self.pglookout.current_master, "other")
+
     def test_replication_positions(self):
         standby_nodes = {'10.255.255.10': {'fetch_time': '2014-08-28T14:09:57.918753Z',
                                            'pg_last_xlog_receive_location': '0/9000090',
@@ -398,6 +434,27 @@ class TestPgLookout(TestCase):
         master_host, _, standby_nodes = self.pglookout.create_node_map(cluster_state, observer_state)
         self.assertEqual(master_host, "10.255.255.7")
         self.assertEqual(list(standby_nodes.keys())[0], "10.255.255.8")
+
+    def test_standbys_failover_equal_replication_positions(self):
+        self.pglookout.current_master = "192.168.57.180"
+        self.pglookout.own_db = "192.168.54.183"
+        now = get_iso_timestamp(datetime.datetime.utcnow())
+        self.pglookout.cluster_state = {'192.168.57.180': {'connection': False, 'fetch_time': now,
+                                                           'pg_last_xlog_receive_location': None, 'db_time': '2015-04-28T11:21:55.830432Z',
+                                                           'pg_is_in_recovery': False, 'replication_time_lag': 0.0,
+                                                           'pg_last_xlog_replay_location': None, 'pg_last_xact_replay_timestamp': None},
+                                        '192.168.63.4': {'connection': True, 'fetch_time': now,
+                                                         'pg_last_xlog_receive_location': '0/70004D8', 'db_time': now,
+                                                         'pg_is_in_recovery': True, 'replication_time_lag': 401.104655,
+                                                         'pg_last_xlog_replay_location': '0/70004D8',
+                                                         'pg_last_xact_replay_timestamp': '2015-04-28T11:21:56.098946+00:00Z'},
+                                        '192.168.54.183': {'connection': True, 'fetch_time': now,
+                                                           'pg_last_xlog_receive_location': '0/70004D8', 'db_time': now,
+                                                           'pg_is_in_recovery': True, 'replication_time_lag': 400.435871,
+                                                           'pg_last_xlog_replay_location': '0/70004D8',
+                                                           'pg_last_xact_replay_timestamp': '2015-04-28T11:21:56.098946+00:00Z'}}
+        self.pglookout.check_cluster_state()
+        self.assertEqual(self.pglookout.execute_external_command.call_count, 1)
 
     def tearDown(self):
         if os.path.exists(self.state_file_path):

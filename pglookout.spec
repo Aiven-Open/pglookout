@@ -12,6 +12,7 @@ Summary:        PostgreSQL replication monitoring and failover daemon
 License:        ASL 2.0
 Source0:        pglookout-rpm-src.tar.gz
 Requires(pre):  shadow-utils
+Requires:       postgresql-server, systemd
 %if %{use_python3}
 Obsoletes:      python3-pglookout
 Requires:       python3-psycopg2, python3-requests, python3-setuptools, systemd-python3, systemd
@@ -50,13 +51,6 @@ make test PYTHON=python2
 %endif
 
 
-%pre
-getent group pglookout >/dev/null || groupadd -r pglookout
-getent passwd pglookout >/dev/null || \
-    useradd -r -g pglookout -d %{_localstatedir}/lib/pglookout -s /usr/bin/sh \
-	    -c "pglookout account" pglookout
-
-
 %files
 %defattr(-,root,root,-)
 %doc LICENSE README.rst pglookout.json
@@ -67,7 +61,7 @@ getent passwd pglookout >/dev/null || \
 %else
 %{python_sitelib}/*
 %endif
-%attr(0755, pglookout, pglookout) %{_localstatedir}/lib/pglookout
+%attr(0755, postgres, postgres) %{_localstatedir}/lib/pglookout
 
 
 %changelog

@@ -80,7 +80,7 @@ def parse_iso_datetime(value):
 
 def convert_xlog_location_to_offset(xlog_location):
     log_id, offset = xlog_location.split("/")
-    return int('ffffffff', 16) * int(log_id, 16) * int(offset, 16)
+    return int(log_id, 16) << 32 | int(offset, 16)
 
 
 def set_syslog_handler(syslog_address, syslog_facility, logger):
@@ -176,7 +176,7 @@ class PgLookout(object):
             self.log.exception("Problem with log_level: %r", self.log_level)
         self.never_promote_these_nodes = self.config.get("never_promote_these_nodes", [])
         # we need the failover_command to be converted into subprocess [] format
-        self.failover_command = self.config.get("failover_command", "").split(" ")
+        self.failover_command = self.config.get("failover_command", "").split()
         self.over_warning_limit_command = self.config.get("over_warning_limit_command")
         self.replication_lag_warning_boundary = self.config.get("warning_replication_time_lag", 30.0)
         self.replication_lag_failover_timeout = self.config.get("max_failover_replication_time_lag", 120.0)
@@ -287,7 +287,10 @@ class PgLookout(object):
 
         if master_host != self.current_master:
             self.log.info("New master node detected: old: %r new: %r: %r", self.current_master, master_host, master_node)
+            previous_master = self.current_master
             self.current_master = master_host
+            if self.own_db and previous_master and self.config.get("autofollow") and self.own_db != master_host:
+                self.start_following_new_master(master_host)
 
         own_state = self.cluster_state.get(self.own_db)
 
@@ -350,9 +353,12 @@ class PgLookout(object):
         known_replication_positions = {}
         for hostname, node_state in standby_nodes.items():
             now = datetime.datetime.utcnow()
-            self.log.debug("conn: %r %r", node_state['connection'], now - parse_iso_datetime(node_state['fetch_time']))
             if node_state['connection'] and now - parse_iso_datetime(node_state['fetch_time']) < datetime.timedelta(seconds=20) and hostname not in self.never_promote_these_nodes:  # pylint: disable=C0301
-                known_replication_positions[convert_xlog_location_to_offset(node_state['pg_last_xlog_receive_location'])] = hostname  # pylint: disable=C0301
+                xlog_pos = convert_xlog_location_to_offset(node_state['pg_last_xlog_receive_location'])
+                if xlog_pos in known_replication_positions:
+                    known_replication_positions[xlog_pos].append(hostname)  # pylint: disable=C0301
+                else:
+                    known_replication_positions[xlog_pos] = [hostname]
         return known_replication_positions
 
     def _have_we_been_in_contact_with_the_master_within_the_failover_timeout(self):
@@ -376,17 +382,21 @@ class PgLookout(object):
         if not known_replication_positions:
             self.log.warning("No known replication positions, canceling failover consideration")
             return
-        furthest_along_host = known_replication_positions[max(known_replication_positions)]
+
+        #  We always pick the 0th one coming out of sort, so both standbys will pick the same node for promotion
+        furthest_along_host = min(known_replication_positions[max(known_replication_positions)])
         self.log.warning("Node that is furthest along is: %r, all replication positions were: %r",
                          furthest_along_host, known_replication_positions)
-
         total_observers = len(self.connected_observer_nodes) + len(self.disconnected_observer_nodes)
         # +1 in the calculation comes from the master node
         total_amount_of_nodes = len(standby_nodes) + 1 - len(self.never_promote_these_nodes) + total_observers
         size_of_needed_majority = total_amount_of_nodes * 0.5
-        size_of_known_state = len(known_replication_positions) + len(self.connected_observer_nodes)
+        amount_of_known_replication_positions = 0
+        for known_replication_position in known_replication_positions.values():
+            amount_of_known_replication_positions += len(known_replication_position)
+        size_of_known_state = amount_of_known_replication_positions + len(self.connected_observer_nodes)
         self.log.debug("Size of known state: %.2f, needed majority: %r, %r/%r", size_of_known_state,
-                       size_of_needed_majority, len(known_replication_positions), int(total_amount_of_nodes))
+                       size_of_needed_majority, amount_of_known_replication_positions, int(total_amount_of_nodes))
 
         if standby_nodes[furthest_along_host] == own_state:
             if os.path.exists(self.config.get("maintenance_mode_file", "/tmp/pglookout_maintenance_mode_file")):
@@ -416,6 +426,41 @@ class PgLookout(object):
                     self.delete_alert_file("replication_delay_warning")
         else:
             self.log.warning("Nothing to do since node: %r is the furthest along", furthest_along_host)
+
+    def modify_recovery_conf_to_point_at_new_master_host(self, new_master_host):
+        path_to_recovery_conf = os.path.join(self.config.get("pg_data_directory"), "recovery.conf")
+        with open(path_to_recovery_conf, "r") as fp:
+            old_recovery_conf_contents = fp.readlines()
+        has_recovery_target_timeline = False
+        with open(path_to_recovery_conf + "_temp", "w") as fp:
+            for line in old_recovery_conf_contents:
+                if line.startswith("recovery_target_timeline"):
+                    has_recovery_target_timeline = True
+                if line.startswith("primary_conninfo"):
+                    parts = []
+                    for part in line.split():
+                        if not part.startswith("host"):
+                            parts.append(part)
+                        else:
+                            parts.append("host=%s" % new_master_host)
+                    line = ' '.join(parts) + "\n"
+                fp.write(line)
+            #  The timeline of the recovery.conf will require a higher timeline target
+            if not has_recovery_target_timeline:
+                fp.write("recovery_target_timeline = 'latest'\n")
+
+        os.rename(path_to_recovery_conf + "_temp", path_to_recovery_conf)
+
+    def start_following_new_master(self, new_master_host):
+        start_time = time.time()
+        start_command, stop_command = self.config.get("pg_start_command", "").split(), self.config.get("pg_stop_command", "").split()
+        self.log.debug("Starting to follow new master: %r, will modify recovery.conf and stop/start PostgreSQL."
+                       "pg_stop_command: %r, pg_start_command: %r",
+                       new_master_host, start_command, stop_command)
+        self.execute_external_command(stop_command)
+        self.modify_recovery_conf_to_point_at_new_master_host(new_master_host)
+        self.execute_external_command(start_command)
+        self.log.debug("Started following new master: %r, took: %.2fs", new_master_host, time.time() - start_time)
 
     def execute_external_command(self, command):
         self.log.warning("Executing external command: %r", command)
