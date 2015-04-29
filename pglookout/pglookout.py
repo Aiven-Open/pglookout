@@ -176,7 +176,7 @@ class PgLookout(object):
             self.log.exception("Problem with log_level: %r", self.log_level)
         self.never_promote_these_nodes = self.config.get("never_promote_these_nodes", [])
         # we need the failover_command to be converted into subprocess [] format
-        self.failover_command = self.config.get("failover_command", "").split(" ")
+        self.failover_command = self.config.get("failover_command", "").split()
         self.over_warning_limit_command = self.config.get("over_warning_limit_command")
         self.replication_lag_warning_boundary = self.config.get("warning_replication_time_lag", 30.0)
         self.replication_lag_failover_timeout = self.config.get("max_failover_replication_time_lag", 120.0)
@@ -438,22 +438,22 @@ class PgLookout(object):
                     has_recovery_target_timeline = True
                 if line.startswith("primary_conninfo"):
                     parts = []
-                    for part in line.split(" "):
+                    for part in line.split():
                         if not part.startswith("host"):
                             parts.append(part)
                         else:
                             parts.append("host=%s" % new_master_host)
-                    line = ' '.join(parts)
+                    line = ' '.join(parts) + "\n"
                 fp.write(line)
             #  The timeline of the recovery.conf will require a higher timeline target
             if not has_recovery_target_timeline:
-                fp.write("recovery_target_timeline = 'latest'")
+                fp.write("recovery_target_timeline = 'latest'\n")
 
         os.rename(path_to_recovery_conf + "_temp", path_to_recovery_conf)
 
     def start_following_new_master(self, new_master_host):
         start_time = time.time()
-        start_command, stop_command = self.config.get("pg_start_command", "").split(" "), self.config.get("pg_stop_command", "").split(" ")
+        start_command, stop_command = self.config.get("pg_start_command", "").split(), self.config.get("pg_stop_command", "").split()
         self.log.debug("Starting to follow new master: %r, will modify recovery.conf and stop/start PostgreSQL."
                        "pg_stop_command: %r, pg_start_command: %r",
                        new_master_host, start_command, stop_command)
