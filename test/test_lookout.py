@@ -54,6 +54,8 @@ class TestPgLookout(TestCase):
         self.pglookout = PgLookout("pglookout.json")
         self.pglookout.execute_external_command = Mock()
         self.pglookout.create_alert_file = Mock()
+        self.pglookout.check_for_maintenance_mode_file = Mock()
+        self.pglookout.check_for_maintenance_mode_file.return_value = False
         self.temp_dir = tempfile.mkdtemp()
         self.state_file_path = os.path.join(self.temp_dir, "state_file")
 
@@ -151,19 +153,22 @@ class TestPgLookout(TestCase):
         self.assertFalse(self.pglookout.replication_lag_over_warning_limit)
 
     def test_check_cluster_do_failover_with_a_node_which_is_is_maintenance(self):
-        self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False)
+        self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False,
+                                      db_time=datetime.datetime(year=2014, month=1, day=1))
 
         self._add_db_to_cluster_state("kuu", pg_last_xlog_receive_location="1/aaaaaaaa",
                                       pg_is_in_recovery=True, connection=True, replication_time_lag=130.0)
-        open("/tmp/pglookout_maintenance_mode_file", "w").write("foo")
 
         self.pglookout.never_promote_these_nodes = []
         self.pglookout.own_db = "kuu"
         self.pglookout.execute_external_command.return_value = 0
         self.pglookout.replication_lag_over_warning_limit = True
+        self.pglookout.check_for_maintenance_mode_file.return_value = True
         self.pglookout.check_cluster_state()
         self.assertEqual(self.pglookout.execute_external_command.call_count, 0)
         self.assertTrue(self.pglookout.replication_lag_over_warning_limit)
+        self.assertEqual(self.pglookout.check_for_maintenance_mode_file.call_count, 1)
+
 
     def test_check_cluster_do_failover_with_a_node_which_should_never_be_promoted(self):
         self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False)
@@ -460,5 +465,3 @@ class TestPgLookout(TestCase):
     def tearDown(self):
         if os.path.exists(self.state_file_path):
             os.unlink(self.state_file_path)
-        if os.path.exists("/tmp/pglookout_maintenance_mode_file"):
-            os.unlink("/tmp/pglookout_maintenance_mode_file")

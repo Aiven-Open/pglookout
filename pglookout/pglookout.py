@@ -399,7 +399,7 @@ class PgLookout(object):
                        size_of_needed_majority, amount_of_known_replication_positions, int(total_amount_of_nodes))
 
         if standby_nodes[furthest_along_host] == own_state:
-            if os.path.exists(self.config.get("maintenance_mode_file", "/tmp/pglookout_maintenance_mode_file")):
+            if self.check_for_maintenance_mode_file():
                 self.log.warning("Canceling failover even though we were the node the furthest along, since "
                                  "this node has an existing maintenance_mode_file: %r",
                                  self.config.get("maintenance_mode_file", "/tmp/pglookout_maintenance_mode_file"))
@@ -473,6 +473,9 @@ class PgLookout(object):
             return_code = err.returncode  # pylint: disable=E1101
         self.log.warning("Executed external command: %r, output: %r", return_code, output)
         return return_code
+
+    def check_for_maintenance_mode_file(self):
+        return os.path.exists(self.config.get("maintenance_mode_file", "/tmp/pglookout_maintenance_mode_file"))
 
     def create_alert_file(self, filename):
         try:
