@@ -1,3 +1,11 @@
+pglookout 1.2.0 (2015-05-xx)
+============================
+
+* Support autofollowin where a standby starts automatically following another standby that has been promoted to be the new cluster master
+* Packaging improvements
+* Multiple bugfixes
+* Better support for completely idle PG replication enviroments
+
 pglookout 1.1.0 (2015-02-14)
 ============================
 
