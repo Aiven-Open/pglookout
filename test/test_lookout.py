@@ -169,7 +169,6 @@ class TestPgLookout(TestCase):
         self.assertTrue(self.pglookout.replication_lag_over_warning_limit)
         self.assertEqual(self.pglookout.check_for_maintenance_mode_file.call_count, 1)
 
-
     def test_check_cluster_do_failover_with_a_node_which_should_never_be_promoted(self):
         self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False)
 
