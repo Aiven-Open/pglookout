@@ -285,7 +285,7 @@ class PgLookout(object):
 
         master_host, master_node, standby_nodes = self.create_node_map(cluster_state, observer_state)  # pylint: disable=W0612
 
-        if master_host != self.current_master:
+        if master_host and master_host != self.current_master:
             self.log.info("New master node detected: old: %r new: %r: %r", self.current_master, master_host, master_node)
             previous_master = self.current_master
             self.current_master = master_host
