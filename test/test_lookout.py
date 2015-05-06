@@ -53,6 +53,7 @@ class TestPgLookout(TestCase):
     def setUp(self):
         self.pglookout = PgLookout("pglookout.json")
         self.pglookout.execute_external_command = Mock()
+        self.pglookout.create_alert_file = Mock()
         self.temp_dir = tempfile.mkdtemp()
         self.state_file_path = os.path.join(self.temp_dir, "state_file")
 
@@ -102,13 +103,13 @@ class TestPgLookout(TestCase):
         self.pglookout.execute_external_command.return_value = 0
         self.pglookout.check_cluster_state()
         self.assertEqual(self.pglookout.execute_external_command.call_count, 1)
-        self.assertTrue(os.path.exists("replication_delay_warning"))
+        self.assertEqual(self.pglookout.create_alert_file.call_count, 1)
         self.pglookout.check_cluster_state()
 
         # call count does not change when we have sent a single warning
         self.assertEqual(self.pglookout.execute_external_command.call_count, 1)
         self.assertTrue(self.pglookout.replication_lag_over_warning_limit)
-        self.assertTrue(os.path.exists("replication_delay_warning"))
+        self.assertEqual(self.pglookout.create_alert_file.call_count, 1)
 
         # and then the replication catches up
         self._add_db_to_cluster_state("kuu", pg_last_xlog_receive_location="1/aaaaaaaa",
@@ -461,7 +462,3 @@ class TestPgLookout(TestCase):
             os.unlink(self.state_file_path)
         if os.path.exists("/tmp/pglookout_maintenance_mode_file"):
             os.unlink("/tmp/pglookout_maintenance_mode_file")
-        if os.path.exists("replication_delay_warning"):
-            os.unlink("replication_delay_warning")
-        if os.path.exists("failover_has_happened"):
-            os.unlink("failover_has_happened")
