@@ -3,15 +3,16 @@
 # C0111=missing docstring
 # C0301= Line too long (85/80)
 # I0011=Locally disabling
-# W0702= too broad except
 # R0902= Too many instance attributes (23/7)
 # R0903= too few public methods
 # R0904= too many public methods
 # R0912= too many branches
 # R0913= too many arguments
-# R0913= too many local variables
+# R0914= too many local variables
 # R0915= Too many statements (53/50)
-disable=C0103, C0111, C0301, I0011, W0702, R0902, R0903, R0904, R0912, R0913, R0914, R0915
+# W0142= star magic
+# W0702= too broad except
+disable=C0103, C0111, C0301, I0011, R0902, R0903, R0904, R0912, R0913, R0914, R0915, W0142, W0702
 
 [REPORTS]
 reports=no
