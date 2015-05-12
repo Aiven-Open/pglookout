@@ -75,7 +75,7 @@ def parse_iso_datetime(value):
         match = re.match(pattern_basic, value)
     parts = dict((key, int(match.group(key) or '0'))
                  for key in ('year', 'month', 'day', 'hour', 'minute', 'second', 'microsecond'))
-    return datetime.datetime(tzinfo=None, **parts)  # pylint: disable=W0142
+    return datetime.datetime(tzinfo=None, **parts)
 
 
 def convert_xlog_location_to_offset(xlog_location):
