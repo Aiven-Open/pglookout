@@ -182,6 +182,14 @@ description of the current state of the cluster which is under monitoring.
 Configuration keys
 ==================
 
+``autofollow`` (default ``false``)
+
+Do you want pglookout to try to start following the new master. Useful
+in scenarios where you have a master and two standbys, master dies
+and another standby is promoted. This will allow the remaining standby
+to start following the new master. Requires ``pg_data_directory``, ``pg_start_command``
+and ``pg_stop_command`` configuration keys to be set.
+
 ``db_poll_interval`` (default ``5.0``)
 
 Interval on how often should the connections defined in remote_conns
@@ -263,6 +271,22 @@ own.
 ``log_level`` (default ``"INFO"``)
 
 Determines log level of pglookout.
+
+``pg_data_directory`` (default ``"/var/lib/pgsql/data"``)
+
+PG data directory that needs to be set when autofollow has been turned on.
+Note that pglookout needs to have the permissions to write there. (specifically
+to recovery.conf)
+
+``pg_start_command`` (default ``""``)
+
+Command to start a PostgreSQL process on a node which has autofollow set to
+true. Usually something like "sudo systemctl start postgresql".
+
+``pg_stop_command`` (default ``""``)
+
+Command to stop a PostgreSQL process on a node which has autofollow set to
+true. Usually something like "sudo systemctl start postgresql".
 
 ``syslog`` (default ``false``)
 
