@@ -353,12 +353,21 @@ class PgLookout(object):
         known_replication_positions = {}
         for hostname, node_state in standby_nodes.items():
             now = datetime.datetime.utcnow()
-            if node_state['connection'] and now - parse_iso_datetime(node_state['fetch_time']) < datetime.timedelta(seconds=20) and hostname not in self.never_promote_these_nodes:  # pylint: disable=C0301
-                xlog_pos = convert_xlog_location_to_offset(node_state['pg_last_xlog_receive_location'])
-                if xlog_pos in known_replication_positions:
-                    known_replication_positions[xlog_pos].append(hostname)  # pylint: disable=C0301
-                else:
-                    known_replication_positions[xlog_pos] = [hostname]
+            if node_state['connection'] and \
+                now - parse_iso_datetime(node_state['fetch_time']) < datetime.timedelta(seconds=20) and \
+                hostname not in self.never_promote_these_nodes:  # noqa # pylint: disable=C0301
+                # use pg_last_xlog_receive_location if it's available,
+                # otherwise fall back to pg_last_xlog_replay_location but
+                # note that both of them can be None.  We prefer
+                # receive_location over replay_location as some nodes may
+                # not yet have replayed everything they've received, but
+                # also consider the replay location in case receive_location
+                # is empty as a node that has been brought up from backups
+                # without ever connecting to a master will not have an empty
+                # pg_last_xlog_receive_location
+                lsn = node_state['pg_last_xlog_receive_location'] or node_state['pg_last_xlog_replay_location']
+                xlog_pos = convert_xlog_location_to_offset(lsn) if lsn else 0
+                known_replication_positions.setdefault(xlog_pos, set()).add(hostname)
         return known_replication_positions
 
     def _have_we_been_in_contact_with_the_master_within_the_failover_timeout(self):
