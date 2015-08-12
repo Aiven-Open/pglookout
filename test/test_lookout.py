@@ -387,14 +387,32 @@ class TestPgLookout(TestCase):
         self.assertEqual(self.pglookout.current_master, "other")
 
     def test_replication_positions(self):
-        standby_nodes = {'10.255.255.10': {'fetch_time': '2014-08-28T14:09:57.918753Z',
-                                           'pg_last_xlog_receive_location': '0/9000090',
-                                           'pg_is_in_recovery': True,
-                                           'pg_last_xact_replay_timestamp': '2014-08-28T14:05:43.577357+00:00Z',
-                                           'connection': True, 'pg_last_xlog_replay_location': '0/9000090',
-                                           'replication_time_lag': 254.341944,
-                                           'db_time': '2014-08-28T14:09:57.919301+00:00Z'}}
-        self.pglookout.get_replication_positions(standby_nodes)
+        standby_nodes = {
+            '10.255.255.10': {
+                'connection': True,
+                'db_time': '2014-08-28T14:09:57.919301+00:00Z',
+                'fetch_time': '2014-08-28T14:09:57.918753Z',
+                'pg_is_in_recovery': True,
+                'pg_last_xlog_receive_location': '0/9000090',
+                'pg_last_xlog_replay_location': '0/9000090',
+                'pg_last_xact_replay_timestamp': '2014-08-28T14:05:43.577357+00:00Z',
+                'replication_time_lag': 254.341944,
+            },
+        }
+        # the above node shouldn't show up as it's fetch_time is (way) older than 20 seconds
+        positions = {}
+        assert self.pglookout.get_replication_positions(standby_nodes) == positions
+        standby_nodes['10.255.255.10']['fetch_time'] = get_iso_timestamp()
+        positions[0x9000090] = set(['10.255.255.10'])
+        assert self.pglookout.get_replication_positions(standby_nodes) == positions
+        # add another standby, further ahead
+        standby_nodes['10.255.255.11'] = dict(standby_nodes['10.255.255.10'], pg_last_xlog_receive_location='1/0000AAAA')
+        positions[1 << 32 | 0xAAAA] = set(['10.255.255.11'])
+        assert self.pglookout.get_replication_positions(standby_nodes) == positions
+        # add another standby which hasn't received anything
+        standby_nodes['10.255.255.12'] = dict(standby_nodes['10.255.255.10'], pg_last_xlog_receive_location=None)
+        positions[0x9000090].add('10.255.255.12')
+        assert self.pglookout.get_replication_positions(standby_nodes) == positions
 
     def test_node_map(self):
         cluster_state = {'10.255.255.10': {'fetch_time': '2014-08-28T14:26:51.066368Z',
