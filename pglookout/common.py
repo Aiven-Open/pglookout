@@ -16,6 +16,12 @@ def create_connection_string(connection_info):
                     for k, v in sorted(connection_info.items()))
 
 
+def get_connection_info_from_config_line(line):
+    _, value = line.split("=", 1)
+    value = value.strip()[1:-1].replace("''", "'")
+    return get_connection_info(value)
+
+
 def get_connection_info(info):
     """turn a connection info object into a dict or return it if it was a
     dict already.  supports both the traditional libpq format and the new
