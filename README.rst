@@ -199,6 +199,15 @@ be polled for information on DB replication state.
 
 PG database connection strings that the pglookout process should monitor.
 
+``primary_conninfo_template``
+
+Connection string or connection info dict template to use when setting a new
+primary_conninfo value for recovery.conf after a failover has happened.  Any
+provided hostname and database name in the template is ignored and they are
+replaced with a replication connection to the new master node.
+
+Required when ``autofollow`` is true.
+
 ``observers`` (default ``{}``)
 
 This object contains key value pairs like ``{"1.2.3.4":

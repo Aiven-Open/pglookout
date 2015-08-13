@@ -8,6 +8,7 @@ This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
 
+from pglookout.common import get_connection_info, get_connection_info_from_config_line
 from pglookout.pglookout import PgLookout, parse_iso_datetime, get_iso_timestamp
 try:
     from mock import Mock  # pylint: disable=F0401
@@ -371,20 +372,29 @@ class TestPgLookout(TestCase):
 
         pg_data_dir = os.path.join(self.temp_dir + os.sep + "test_pgdata")
         os.makedirs(pg_data_dir)
-        old_recovery_conf = "standby_mode = 'on'\nprimary_conninfo = 'user=replication password=vjsh8l7sv4a902y1tsdz host=old_master port=5432 sslmode=prefer sslcompression=1 krbsrvname=postgres'\n"
+        primary_conninfo = "user=replication password=vjsh8l7sv4a902y1tsdz host=old_master port=5432 sslmode=prefer sslcompression=1 krbsrvname=postgres"
+        old_recovery_conf = "standby_mode = 'on'\nprimary_conninfo = '{0}'\n".format(primary_conninfo)
         with open(os.path.join(pg_data_dir, "recovery.conf"), "w") as fp:
             fp.write(old_recovery_conf)
 
         self.pglookout.config['pg_data_directory'] = pg_data_dir
         self.pglookout.config['autofollow'] = True
+        self.pglookout.primary_conninfo_template = get_connection_info(primary_conninfo)
 
         self.pglookout.check_cluster_state()
+        self.assertEqual(self.pglookout.current_master, "other")
 
         with open(os.path.join(pg_data_dir, "recovery.conf"), "r") as fp:
-            content = fp.read()
-            self.assertEqual(content, "standby_mode = 'on'\nprimary_conninfo = 'user=replication password=vjsh8l7sv4a902y1tsdz host=other port=5432 sslmode=prefer sslcompression=1 krbsrvname=postgres'\nrecovery_target_timeline = 'latest'\n")
-
-        self.assertEqual(self.pglookout.current_master, "other")
+            new_lines = fp.read().splitlines()
+        assert new_lines.pop(0).startswith("# pglookout updated primary_conninfo")
+        assert new_lines.pop(0) == "standby_mode = 'on'"
+        assert new_lines[0].startswith("primary_conninfo = ")
+        new_primary_conninfo = new_lines.pop(0)
+        assert new_lines.pop(0) == "recovery_target_timeline = 'latest'"
+        assert new_lines == []
+        old_conn_info = get_connection_info(primary_conninfo)
+        new_conn_info = get_connection_info_from_config_line(new_primary_conninfo)
+        assert new_conn_info == dict(old_conn_info, host="other")
 
     def test_replication_positions(self):
         standby_nodes = {

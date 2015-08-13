@@ -9,6 +9,11 @@ See the file `LICENSE` for details.
 """
 
 from __future__ import print_function
+from .common import create_connection_string, get_connection_info, get_connection_info_from_config_line
+from email.utils import parsedate
+from psycopg2.extensions import adapt
+from psycopg2.extras import RealDictCursor
+from threading import Thread
 import copy
 import datetime
 import errno
@@ -24,9 +29,6 @@ import socket
 import subprocess
 import sys
 import time
-from email.utils import parsedate
-from psycopg2.extras import RealDictCursor
-from threading import Thread
 
 try:
     from SocketServer import ThreadingMixIn  # pylint: disable=F0401
@@ -112,6 +114,7 @@ class PgLookout(object):
         self.failover_command = None
         self.over_warning_limit_command = None
         self.never_promote_these_nodes = None
+        self.primary_conninfo_template = None
         self.cluster_monitor = None
         self.syslog_handler = None
         self.load_config()
@@ -150,11 +153,19 @@ class PgLookout(object):
         try:
             with open(self.config_path) as fp:
                 self.config = json.load(fp)
-                if self.cluster_monitor:
-                    self.cluster_monitor.config = copy.deepcopy(self.config)
         except:
             self.log.exception("Invalid JSON config, exiting")
-            sys.exit(0)
+            sys.exit(1)
+
+        if self.config.get("autofollow"):
+            try:
+                self.primary_conninfo_template = get_connection_info(self.config["primary_conninfo_template"])
+            except (KeyError, ValueError):
+                self.log.exception("Invalid or missing primary_conninfo_template; not enabling autofollow")
+                self.config["autofollow"] = False
+
+        if self.cluster_monitor:
+            self.cluster_monitor.config = copy.deepcopy(self.config)
 
         if self.config.get("syslog") and not self.syslog_handler:
             self.syslog_handler = set_syslog_handler(self.config.get("syslog_address", "/dev/log"),
@@ -287,10 +298,9 @@ class PgLookout(object):
 
         if master_host and master_host != self.current_master:
             self.log.info("New master node detected: old: %r new: %r: %r", self.current_master, master_host, master_node)
-            previous_master = self.current_master
             self.current_master = master_host
-            if self.own_db and previous_master and self.config.get("autofollow") and self.own_db != master_host:
-                self.start_following_new_master(master_host, previous_master)
+            if self.own_db and self.own_db != master_host and self.config.get("autofollow"):
+                self.start_following_new_master(master_host)
 
         own_state = self.cluster_state.get(self.own_db)
 
@@ -436,39 +446,59 @@ class PgLookout(object):
         else:
             self.log.warning("Nothing to do since node: %r is the furthest along", furthest_along_host)
 
-    def modify_recovery_conf_to_point_at_new_master_host(self, new_master_host, previous_master_host):
+    def modify_recovery_conf_to_point_at_new_master_host(self, new_master_host):
         path_to_recovery_conf = os.path.join(self.config.get("pg_data_directory"), "recovery.conf")
         with open(path_to_recovery_conf, "r") as fp:
-            old_recovery_conf_contents = fp.readlines()
+            old_conf = fp.read().splitlines()
         has_recovery_target_timeline = False
         new_conf = []
+        old_conn_info = None
+        for line in old_conf:
+            if line.startswith("recovery_target_timeline"):
+                has_recovery_target_timeline = True
+            if line.startswith("primary_conninfo"):
+                # grab previous entry: strip surrounding quotes and replace two quotes with one
+                try:
+                    old_conn_info = get_connection_info_from_config_line(line)
+                except ValueError:
+                    self.log.exception("failed to parse previous %r, ignoring", line)
+                continue  # skip this line
+            new_conf.append(line)
+
+        # If has_recovery_target_timeline is set and old_conn_info matches
+        # new info we don't have to do anything
+        new_conn_info = dict(self.primary_conninfo_template, host=new_master_host)
+        if new_conn_info == old_conn_info and has_recovery_target_timeline:
+            self.log.debug("recovery.conf already contains conninfo matching %r, not updating", new_master_host)
+            return False
+        # Otherwise we append the new primary_conninfo
+        new_conf.append("primary_conninfo = {0}".format(adapt(create_connection_string(new_conn_info))))
+        # The timeline of the recovery.conf will require a higher timeline target
+        if not has_recovery_target_timeline:
+            new_conf.append("recovery_target_timeline = 'latest'")
+        # prepend our tag
+        new_conf.insert(0, "# pglookout updated primary_conninfo for host {0} at {1}".format(new_master_host, get_iso_timestamp()))
+        # Replace old recovery.conf with a fresh copy
         with open(path_to_recovery_conf + "_temp", "w") as fp:
-            for line in old_recovery_conf_contents:
-                if line.startswith("recovery_target_timeline"):
-                    has_recovery_target_timeline = True
-                if line.startswith("primary_conninfo"):
-                    line = line.replace(previous_master_host, new_master_host)
-                new_conf.append(line)
-            #  The timeline of the recovery.conf will require a higher timeline target
-            if not has_recovery_target_timeline:
-                new_conf.append("recovery_target_timeline = 'latest'\n")
-            for line in new_conf:
-                fp.write(line)
-
-        self.log.debug("Previous recovery.conf: %r", ''.join(old_recovery_conf_contents))
-        self.log.debug("Newly written recovery.conf: %r", ''.join(new_conf))
+            fp.write("\n".join(new_conf) + "\n")
+        self.log.debug("Previous recovery.conf: %s", old_conf)
+        self.log.debug("Newly written recovery.conf: %s", new_conf)
         os.rename(path_to_recovery_conf + "_temp", path_to_recovery_conf)
+        return True
 
-    def start_following_new_master(self, new_master_host, previous_master_host):
+    def start_following_new_master(self, new_master_host):
         start_time = time.time()
+        updated_config = self.modify_recovery_conf_to_point_at_new_master_host(new_master_host)
+        if not updated_config:
+            self.log.info("Already following master %r, no need to start following it again", new_master_host)
+            return
         start_command, stop_command = self.config.get("pg_start_command", "").split(), self.config.get("pg_stop_command", "").split()
-        self.log.debug("Starting to follow new master: %r, will modify recovery.conf and stop/start PostgreSQL."
-                       "pg_stop_command: %r, pg_start_command: %r",
-                       new_master_host, start_command, stop_command)
+        self.log.info("Starting to follow new master %r, modified recovery.conf and restarting PostgreSQL"
+                      "; pg_stop_command %r; pg_start_command %r",
+                      new_master_host, start_command, stop_command)
         self.execute_external_command(stop_command)
-        self.modify_recovery_conf_to_point_at_new_master_host(new_master_host, previous_master_host)
         self.execute_external_command(start_command)
-        self.log.debug("Started following new master: %r, took: %.2fs", new_master_host, time.time() - start_time)
+        self.log.info("Started following new master %r, took: %.2fs", new_master_host, time.time() - start_time)
 
     def execute_external_command(self, command):
         self.log.warning("Executing external command: %r", command)
