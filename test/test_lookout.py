@@ -8,8 +8,10 @@ This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
 
-from pglookout.common import get_connection_info, get_connection_info_from_config_line
-from pglookout.pglookout import PgLookout, parse_iso_datetime, get_iso_timestamp
+from pglookout.common import (
+    get_connection_info, get_connection_info_from_config_line,
+    get_iso_timestamp)
+from pglookout.pglookout import PgLookout
 try:
     from mock import Mock  # pylint: disable=F0401
 except:  # py3k import location
@@ -18,6 +20,7 @@ from unittest import TestCase
 import datetime
 import os
 import tempfile
+import time
 
 
 def _create_db_node_state(pg_last_xlog_receive_location=None, pg_is_in_recovery=True,
@@ -59,11 +62,6 @@ class TestPgLookout(TestCase):
         self.pglookout.check_for_maintenance_mode_file.return_value = False
         self.temp_dir = tempfile.mkdtemp()
         self.state_file_path = os.path.join(self.temp_dir, "state_file")
-
-    def test_parse_iso_datetime(self):
-        date = datetime.datetime.utcnow()
-        date.replace(microsecond=0)
-        self.assertEqual(date, parse_iso_datetime(date.isoformat() + "Z"))
 
     def test_state_file_write(self):
         self.pglookout.config['json_state_file_path'] = self.state_file_path
@@ -215,6 +213,47 @@ class TestPgLookout(TestCase):
         self.pglookout.check_cluster_state()
         self.assertEqual(self.pglookout.execute_external_command.call_count, 1)
         self.assertFalse(self.pglookout.replication_lag_over_warning_limit)
+
+    def test_failover_with_no_master_anymore(self):
+        # this should not trigger an immediate failover as we have two
+        # standbys online but we've never seen a master so we wait a while
+        # and see what happens
+        self.pglookout.own_db = "kuu"
+        self._add_db_to_cluster_state("kuu", pg_last_xlog_receive_location="F/aaaaaaaa",
+                                      pg_is_in_recovery=True, connection=True, replication_time_lag=0)
+        self._add_db_to_cluster_state("puu", pg_last_xlog_receive_location="2/aaaaaaaa",
+                                      pg_is_in_recovery=True, connection=True, replication_time_lag=1)
+
+        self.pglookout.execute_external_command.return_value = 0
+        self.pglookout.check_cluster_state()
+        assert self.pglookout.execute_external_command.call_count == 0
+
+        # now we add a fake "current" master indicating that the cluster has
+        # been consistent at some point, this should trigger an immediate
+        # failover
+        self.pglookout.current_master = "something obsolete"
+        self.pglookout.check_cluster_state()
+        assert self.pglookout.execute_external_command.call_count == 1
+
+    def test_failover_with_no_master_timeout(self):
+        # this should not trigger an immediate failover as we have two
+        # standbys online but we've never seen a master so we wait a while
+        # and see what happens
+        self.pglookout.own_db = "kuu"
+        self._add_db_to_cluster_state("kuu", pg_last_xlog_receive_location="F/aaaaaaaa",
+                                      pg_is_in_recovery=True, connection=True, replication_time_lag=0)
+        self._add_db_to_cluster_state("puu", pg_last_xlog_receive_location="2/aaaaaaaa",
+                                      pg_is_in_recovery=True, connection=True, replication_time_lag=1)
+
+        self.pglookout.execute_external_command.return_value = 0
+        self.pglookout.check_cluster_state()
+        assert self.pglookout.execute_external_command.call_count == 0
+
+        # indicate that we haven't seen configuration changes for 5 minutes,
+        # that should trigger a failover as the timeout has passed
+        self.pglookout.cluster_nodes_change_time = time.time() - 300
+        self.pglookout.check_cluster_state()
+        assert self.pglookout.execute_external_command.call_count == 1
 
     def test_failover_over_replication_lag_when_still_connected_to_master(self):
         self._add_db_to_cluster_state("old_master", pg_is_in_recovery=False, connection=False)
