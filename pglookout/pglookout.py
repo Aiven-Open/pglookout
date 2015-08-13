@@ -94,6 +94,7 @@ class PgLookout(object):
         self.primary_conninfo_template = None
         self.cluster_monitor = None
         self.syslog_handler = None
+        self.cluster_nodes_change_time = time.time()
         self.load_config()
 
         signal.signal(signal.SIGHUP, self.load_config)
@@ -127,12 +128,17 @@ class PgLookout(object):
     def load_config(self, _signal=None, _frame=None):
         self.log.debug("Loading JSON config from: %r, signal: %r, frame: %r",
                        self.config_path, _signal, _frame)
+
+        previous_remote_conns = self.config.get("remote_conns")
         try:
             with open(self.config_path) as fp:
                 self.config = json.load(fp)
         except:
             self.log.exception("Invalid JSON config, exiting")
             sys.exit(1)
+
+        if previous_remote_conns != self.config.get("remote_conns"):
+            self.cluster_nodes_change_time = time.time()
 
         if self.config.get("autofollow"):
             try:
@@ -250,9 +256,9 @@ class PgLookout(object):
         if len(self.connected_master_nodes) == 0:
             self.log.warning("No known master node, disconnected masters: %r", list(disconnected_master_nodes.keys()))
             if len(disconnected_master_nodes) > 0:
-                master_host, master_node = list(disconnected_master_nodes.keys())[0], list(disconnected_master_nodes.values())[0]
+                master_host, master_node = list(disconnected_master_nodes.items())[0]
         elif len(self.connected_master_nodes) == 1:
-            master_host, master_node = list(connected_master_nodes.keys())[0], list(connected_master_nodes.values())[0]
+            master_host, master_node = list(connected_master_nodes.items())[0]
             if disconnected_master_nodes:
                 self.log.warning("Picked %r as master since %r are in a disconnected state",
                                  master_host, disconnected_master_nodes)
@@ -302,7 +308,28 @@ class PgLookout(object):
             if not standby_nodes:
                 self.log.warning("No standby nodes set, master node: %r", master_node)
                 return
-            self.check_replication_lag(own_state, standby_nodes)
+            self.consider_failover(own_state, master_node, standby_nodes)
+
+    def consider_failover(self, own_state, master_node, standby_nodes):
+        if not master_node:
+            # no master node at all in the cluster?
+            self.log.warning("No master node in cluster, %r standby nodes exist, %.2f seconds since last cluster config update, failover timeout set to %r seconds",
+                             len(standby_nodes), time.time() - self.cluster_nodes_change_time, self.replication_lag_failover_timeout)
+            if self.current_master:
+                # we've seen a master at some point in time, but now it's
+                # missing, perform an immediate failover to promote one of
+                # the standbys
+                self.log.warning("Performing failover decision because existing master node disappeared from configuration")
+                self.do_failover_decision(own_state, standby_nodes)
+                return
+            elif (time.time() - self.cluster_nodes_change_time) >= self.replication_lag_failover_timeout:
+                # we've never seen a master and more than failover_timeout
+                # seconds have passed since last config load (and start of
+                # connection attempts to other nodes); perform failover
+                self.log.warning("Performing failover decision because no master node was seen in cluster before timeout")
+                self.do_failover_decision(own_state, standby_nodes)
+                return
+        self.check_replication_lag(own_state, standby_nodes)
 
     def check_replication_lag(self, own_state, standby_nodes):
         replication_lag = own_state.get('replication_time_lag')
