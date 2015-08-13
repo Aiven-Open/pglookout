@@ -9,7 +9,9 @@ See the file `LICENSE` for details.
 """
 
 from __future__ import print_function
-from .common import create_connection_string, get_connection_info, get_connection_info_from_config_line
+from .common import (
+    create_connection_string, get_connection_info, get_connection_info_from_config_line,
+    convert_xlog_location_to_offset, parse_iso_datetime, get_iso_timestamp)
 from email.utils import parsedate
 from psycopg2.extensions import adapt
 from psycopg2.extras import RealDictCursor
@@ -21,7 +23,6 @@ import logging
 import logging.handlers
 import os
 import psycopg2
-import re
 import requests
 import select
 import signal
@@ -59,30 +60,6 @@ logging.basicConfig(level=logging.DEBUG, format=format_str)
 
 class PglookoutTimeout(Exception):
     pass
-
-
-def get_iso_timestamp(fetch_time=None):
-    if not fetch_time:
-        fetch_time = datetime.datetime.utcnow()
-    elif fetch_time.tzinfo:
-        fetch_time = fetch_time.replace(tzinfo=None) - datetime.timedelta(seconds=fetch_time.utcoffset().seconds)
-    return fetch_time.isoformat() + "Z"
-
-
-def parse_iso_datetime(value):
-    pattern_ext = r'(?P<year>\d{4})-(?P<month>\d\d)-(?P<day>\d\d)(T(?P<hour>\d\d):(?P<minute>\d\d)(:(?P<second>\d\d)(.(?P<microsecond>\d{6}))?)?Z)?$'  # pylint: disable=C0301
-    pattern_basic = r'(?P<year>\d{4})(?P<month>\d\d)(?P<day>\d\d)(T(?P<hour>\d\d)(?P<minute>\d\d)((?P<second>\d\d)((?P<microsecond>\d{6}))?)?Z)?$'  # pylint: disable=C0301
-    match = re.match(pattern_ext, value)
-    if not match:
-        match = re.match(pattern_basic, value)
-    parts = dict((key, int(match.group(key) or '0'))
-                 for key in ('year', 'month', 'day', 'hour', 'minute', 'second', 'microsecond'))
-    return datetime.datetime(tzinfo=None, **parts)
-
-
-def convert_xlog_location_to_offset(xlog_location):
-    log_id, offset = xlog_location.split("/")
-    return int(log_id, 16) << 32 | int(offset, 16)
 
 
 def set_syslog_handler(syslog_address, syslog_facility, logger):

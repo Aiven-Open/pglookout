@@ -8,8 +8,10 @@ This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
 
-from pglookout.common import get_connection_info, get_connection_info_from_config_line
-from pglookout.pglookout import PgLookout, parse_iso_datetime, get_iso_timestamp
+from pglookout.common import (
+    get_connection_info, get_connection_info_from_config_line,
+    get_iso_timestamp)
+from pglookout.pglookout import PgLookout
 try:
     from mock import Mock  # pylint: disable=F0401
 except:  # py3k import location
@@ -59,11 +61,6 @@ class TestPgLookout(TestCase):
         self.pglookout.check_for_maintenance_mode_file.return_value = False
         self.temp_dir = tempfile.mkdtemp()
         self.state_file_path = os.path.join(self.temp_dir, "state_file")
-
-    def test_parse_iso_datetime(self):
-        date = datetime.datetime.utcnow()
-        date.replace(microsecond=0)
-        self.assertEqual(date, parse_iso_datetime(date.isoformat() + "Z"))
 
     def test_state_file_write(self):
         self.pglookout.config['json_state_file_path'] = self.state_file_path
