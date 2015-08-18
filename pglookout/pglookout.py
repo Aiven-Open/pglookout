@@ -716,10 +716,14 @@ class ClusterMonitor(Thread):
         try:
             self.log.debug("Querying DB state for DB: %r", hostname)
             c = db_conn.cursor(cursor_factory=RealDictCursor)
-            query = "SELECT *, now() AS db_time, " \
-                "pg_last_xact_replay_timestamp " \
-                "FROM pg_last_xact_replay_timestamp(), pg_is_in_recovery(), " \
-                "pg_last_xlog_receive_location(), pg_last_xlog_replay_location()"
+            fields = [
+                "now() AS db_time",
+                "pg_is_in_recovery()",
+                "pg_last_xact_replay_timestamp()",
+                "pg_last_xlog_receive_location()",
+                "pg_last_xlog_replay_location()",
+            ]
+            query = "SELECT {}".format(", ".join(fields))
             c.execute(query)
             wait_select(c.connection)
             f_result = c.fetchone()
