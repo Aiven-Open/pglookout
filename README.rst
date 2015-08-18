@@ -22,6 +22,19 @@ between multiple replication clusters. In general it is recommended
 that you run with at least one external observer giving an additional
 viewpoint on the health of the cluster.
 
+Requirements
+============
+
+pglookout can monitor PostgreSQL versions 9.1 and above.  Previous versions don't
+provide enough replication information to support pglookout.
+
+pglookout has been developed and tested on modern Linux x86-64 systems, but
+should work on other platforms that provide the required modules.  pglookout is
+implemented in Python and works with CPython versions 2.6, 2.7 and 3.3 or
+newer.  pglookout depends on the Requests_ and Psycopg2_ Python modules.
+
+.. _`Requests`: http://www.python-requests.org/en/latest/
+.. _`Psycopg2`: http://initd.org/psycopg/
 
 Building
 ========
