@@ -19,6 +19,7 @@ except:  # py3k import location
 from unittest import TestCase
 import datetime
 import os
+import shutil
 import tempfile
 import time
 
@@ -60,8 +61,12 @@ class TestPgLookout(TestCase):
         self.pglookout.create_alert_file = Mock()
         self.pglookout.check_for_maintenance_mode_file = Mock()
         self.pglookout.check_for_maintenance_mode_file.return_value = False
-        self.temp_dir = tempfile.mkdtemp()
+        self.temp_dir = tempfile.mkdtemp(prefix="pglookout_test_")
         self.state_file_path = os.path.join(self.temp_dir, "state_file")
+
+    def tearDown(self):
+        if os.path.exists(self.temp_dir) and self.temp_dir.startswith("/tmp/pglookout_test_"):
+            shutil.rmtree(self.temp_dir)
 
     def test_state_file_write(self):
         self.pglookout.config['json_state_file_path'] = self.state_file_path
@@ -527,7 +532,3 @@ class TestPgLookout(TestCase):
                                                            'pg_last_xact_replay_timestamp': '2015-04-28T11:21:56.098946+00:00Z'}}
         self.pglookout.check_cluster_state()
         self.assertEqual(self.pglookout.execute_external_command.call_count, 1)
-
-    def tearDown(self):
-        if os.path.exists(self.state_file_path):
-            os.unlink(self.state_file_path)
