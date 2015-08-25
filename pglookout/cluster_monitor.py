@@ -8,7 +8,7 @@ This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
 
-from .common import parse_iso_datetime, get_iso_timestamp, set_syslog_handler
+from .common import parse_iso_datetime, get_iso_timestamp, total_seconds, set_syslog_handler
 from email.utils import parsedate
 from psycopg2.extras import RealDictCursor
 from threading import Thread
@@ -170,7 +170,7 @@ class ClusterMonitor(Thread):
         # abs is for catching time travel (as in going from the future to the past
         if result["pg_last_xact_replay_timestamp"]:
             replication_time_lag = abs(result["db_time"] - result["pg_last_xact_replay_timestamp"])
-            result["replication_time_lag"] = replication_time_lag.seconds + replication_time_lag.microseconds * 10 ** -6
+            result["replication_time_lag"] = total_seconds(replication_time_lag)
             result["pg_last_xact_replay_timestamp"] = get_iso_timestamp(result["pg_last_xact_replay_timestamp"])
 
         if not result["pg_is_in_recovery"]:

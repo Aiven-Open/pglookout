@@ -13,7 +13,7 @@ from .cluster_monitor import ClusterMonitor
 from .common import (
     create_connection_string, get_connection_info, get_connection_info_from_config_line,
     convert_xlog_location_to_offset, parse_iso_datetime, get_iso_timestamp,
-    set_syslog_handler, LOG_FORMAT)
+    total_seconds, set_syslog_handler, LOG_FORMAT)
 from .webserver import WebServer
 from psycopg2.extensions import adapt
 import copy
@@ -363,7 +363,7 @@ class PgLookout(object):
             time_since_last_contact = datetime.datetime.utcnow() - parse_iso_datetime(db_time)
             if time_since_last_contact < datetime.timedelta(seconds=self.replication_lag_failover_timeout):
                 self.log.debug("We've had contact with master: %r at: %r within the last %.2fs, not failing over",
-                               disconnected_master_node, db_time, time_since_last_contact.seconds)
+                               disconnected_master_node, db_time, total_seconds(time_since_last_contact))
                 return True
         return False
 

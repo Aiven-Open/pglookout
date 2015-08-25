@@ -120,6 +120,14 @@ def parse_iso_datetime(value):
     return datetime.datetime(tzinfo=None, **parts)
 
 
+def total_seconds(td):
+    """mimick timedelta.total_seconds() as available on python 2.7+
+    NOTE: drop this function once we drop python 2.6 support"""
+    if hasattr(td, 'total_seconds'):
+        return td.total_seconds()
+    return td.days * 86400 + td.seconds + td.microseconds / 1000000.0
+
+
 def get_iso_timestamp(fetch_time=None):
     if not fetch_time:
         fetch_time = datetime.datetime.utcnow()
