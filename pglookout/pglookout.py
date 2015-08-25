@@ -90,7 +90,7 @@ class PgLookout(object):
         if daemon:  # If we can import systemd we always notify it
             daemon.notify("READY=1")
             self.log.info("Sent startup notification to systemd that pglookout is READY")
-        self.log.info("PGLookout initialized, own_hostname: %r, own_db: %r, cwd: %r",
+        self.log.info("PGLookout initialized, local hostname: %r, own_db: %r, cwd: %r",
                       socket.gethostname(), self.own_db, os.getcwd())
 
     def quit(self, _signal=None, _frame=None):
@@ -197,7 +197,7 @@ class PgLookout(object):
                     self.log.debug("Ignoring node: %r since it does not belong into our own replication cluster.", host)
                     continue
                 if isinstance(db_state, dict):  # other keys are "connection" and "fetch_time"
-                    own_fetch_time = parse_iso_datetime(cluster_state.get(host, {"fetch_time": get_iso_timestamp(datetime.datetime(year=2000, month=1, day=1))})['fetch_time'])  # pylint: disable=C0301
+                    own_fetch_time = parse_iso_datetime(cluster_state[host]["fetch_time"])
                     observer_fetch_time = parse_iso_datetime(db_state['fetch_time'])
                     self.log.debug("observer_name: %r, dbname: %r, state: %r, observer_fetch_time: %r",
                                    observer_name, host, db_state, observer_fetch_time)
@@ -205,8 +205,9 @@ class PgLookout(object):
                         if db_state['pg_is_in_recovery']:
                             # we always trust ourselves the most for localhost, and
                             # in case we are actually connected to the other node
-                            if observer_fetch_time >= own_fetch_time and host != self.own_db and standby_nodes.get(host, {"connection": False})['connection'] is False:  # pylint: disable=C0301
-                                standby_nodes[host] = db_state
+                            if observer_fetch_time >= own_fetch_time and host != self.own_db:
+                                if host not in standby_nodes or standby_nodes[host]["connection"] is False:
+                                    standby_nodes[host] = db_state
                         else:
                             master_node = connected_master_nodes.get(host, {})
                             connected = master_node.get("connection", False)
@@ -228,7 +229,7 @@ class PgLookout(object):
         self.disconnected_observer_nodes = disconnected_observer_nodes
 
         if len(self.connected_master_nodes) == 0:
-            self.log.warning("No known master node, disconnected masters: %r", list(disconnected_master_nodes.keys()))
+            self.log.warning("No known master node, disconnected masters: %r", list(disconnected_master_nodes))
             if len(disconnected_master_nodes) > 0:
                 master_host, master_node = list(disconnected_master_nodes.items())[0]
         elif len(self.connected_master_nodes) == 1:
@@ -251,7 +252,7 @@ class PgLookout(object):
             self.log.warning("No cluster state, probably still starting up")
             return
 
-        master_host, master_node, standby_nodes = self.create_node_map(cluster_state, observer_state)  # pylint: disable=W0612
+        master_host, master_node, standby_nodes = self.create_node_map(cluster_state, observer_state)
 
         if master_host and master_host != self.current_master:
             self.log.info("New master node detected: old: %r new: %r: %r", self.current_master, master_host, master_node)
@@ -262,16 +263,12 @@ class PgLookout(object):
         own_state = self.cluster_state.get(self.own_db)
 
         # If we're an observer ourselves, we'll grab the IP address from HTTP server address
-        observer_info = ','.join(observer_state.keys()) or 'no'
+        observer_info = ",".join(observer_state) or "no"
         if not self.own_db:
             observer_info = self.config.get("http_address", observer_info)
-
+        standby_info = ",".join(standby_nodes) or "no"
         self.log.debug("Cluster has %s standbys, %s observers and %s as master, own_db: %r, own_state: %r",
-                       ','.join(standby_nodes.keys()) or 'no',
-                       observer_info,
-                       self.current_master,
-                       self.own_db,
-                       own_state or "observer")
+                       standby_info, observer_info, self.current_master, self.own_db, own_state or "observer")
 
         if self.own_db:
             if self.own_db == self.current_master:

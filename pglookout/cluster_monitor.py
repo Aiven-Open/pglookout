@@ -160,22 +160,29 @@ class ClusterMonitor(Thread):
             db_conn.close()
             self.db_conns[hostname] = None
 
-        if f_result:
-            # abs is for catching time travel (as in going from the future to the past
-            if f_result['pg_last_xact_replay_timestamp']:
-                replication_time_lag = abs(f_result['db_time'] - f_result['pg_last_xact_replay_timestamp'])
-                f_result["replication_time_lag"] = replication_time_lag.seconds + replication_time_lag.microseconds * 10 ** -6
-                f_result['pg_last_xact_replay_timestamp'] = f_result['pg_last_xact_replay_timestamp'].isoformat() + "Z"
+        result.update(self._parse_status_query_result(f_result))
+        return result
 
-            if not f_result['pg_is_in_recovery']:
-                # These are set to None so when we query a standby promoted to master
-                # it looks identical to the results from a master node that's never been a standby
-                f_result.update({'pg_last_xlog_receive_location': None,
-                                 'pg_last_xact_replay_timestamp': None,
-                                 'pg_last_xlog_replay_location': None,
-                                 'replication_time_lag': 0.0})
-            f_result.update({"db_time": get_iso_timestamp(f_result['db_time']), "connection": True})
-            result.update(f_result)
+    @staticmethod
+    def _parse_status_query_result(result):
+        if not result:
+            return {}
+        # abs is for catching time travel (as in going from the future to the past
+        if result["pg_last_xact_replay_timestamp"]:
+            replication_time_lag = abs(result["db_time"] - result["pg_last_xact_replay_timestamp"])
+            result["replication_time_lag"] = replication_time_lag.seconds + replication_time_lag.microseconds * 10 ** -6
+            result["pg_last_xact_replay_timestamp"] = get_iso_timestamp(result["pg_last_xact_replay_timestamp"])
+
+        if not result["pg_is_in_recovery"]:
+            # These are set to None so when we query a standby promoted to master
+            # it looks identical to the results from a master node that's never been a standby
+            result.update({
+                "pg_last_xlog_receive_location": None,
+                "pg_last_xact_replay_timestamp": None,
+                "pg_last_xlog_replay_location": None,
+                "replication_time_lag": 0.0,
+            })
+        result.update({"db_time": get_iso_timestamp(result["db_time"]), "connection": True})
         return result
 
     def standby_status_query(self, hostname, db_conn):
