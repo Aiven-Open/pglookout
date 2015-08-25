@@ -6,11 +6,16 @@ See LICENSE for details
 """
 
 import datetime
+import logging
 import re
 try:
     from urllib.parse import urlparse, parse_qs  # pylint: disable=no-name-in-module, import-error
 except ImportError:
     from urlparse import urlparse, parse_qs  # pylint: disable=no-name-in-module, import-error
+
+
+LOG_FORMAT = "%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s"
+LOG_FORMAT_SYSLOG = '%(name)s %(levelname)s: %(message)s'
 
 
 def create_connection_string(connection_info):
@@ -121,3 +126,11 @@ def get_iso_timestamp(fetch_time=None):
     elif fetch_time.tzinfo:
         fetch_time = fetch_time.replace(tzinfo=None) - datetime.timedelta(seconds=fetch_time.utcoffset().seconds)
     return fetch_time.isoformat() + "Z"
+
+
+def set_syslog_handler(syslog_address, syslog_facility, logger):
+    syslog_handler = logging.handlers.SysLogHandler(address=syslog_address, facility=syslog_facility)
+    logger.addHandler(syslog_handler)
+    formatter = logging.Formatter(LOG_FORMAT_SYSLOG)
+    syslog_handler.setFormatter(formatter)
+    return syslog_handler
