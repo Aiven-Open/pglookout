@@ -28,15 +28,15 @@ def _create_db_node_state(pg_last_xlog_receive_location=None, pg_is_in_recovery=
                           connection=True, replication_time_lag=None, fetch_time=None,
                           db_time=None):
     return {
+        "connection": connection,
+        "db_time": get_iso_timestamp(db_time),
         "fetch_time": get_iso_timestamp(fetch_time),
-        "pg_last_xlog_receive_location": pg_last_xlog_receive_location,
         "pg_is_in_recovery": pg_is_in_recovery,
         "pg_last_xact_replay_timestamp": None,
-        "connection": connection,
+        "pg_last_xlog_receive_location": pg_last_xlog_receive_location,
         "pg_last_xlog_replay_location": None,
         "replication_time_lag": replication_time_lag,
-        "db_time": get_iso_timestamp(db_time),
-        }
+    }
 
 
 class TestClusterMonitor(TestCase):
@@ -93,13 +93,14 @@ class TestPgLookout(TestCase):
         else:
             self.pglookout.observer_state[observer_name] = update_dict
 
-    def _add_db_to_cluster_state(self, db_name, pg_last_xlog_receive_location=None,
+    def _add_db_to_cluster_state(self, instance, pg_last_xlog_receive_location=None,
                                  pg_is_in_recovery=True, connection=True, replication_time_lag=None,
-                                 fetch_time=None, db_time=None):
+                                 fetch_time=None, db_time=None, conn_info=None):
         db_node_state = _create_db_node_state(pg_last_xlog_receive_location, pg_is_in_recovery,
                                               connection, replication_time_lag, fetch_time=fetch_time,
                                               db_time=db_time)
-        self.pglookout.cluster_state[db_name] = db_node_state
+        self.pglookout.cluster_state[instance] = db_node_state
+        self.pglookout.config["remote_conns"][instance] = conn_info or {"host": instance}
 
     def test_check_cluster_state_warning(self):
         self._add_db_to_cluster_state("kuu", pg_last_xlog_receive_location="1/aaaaaaaa",
@@ -412,7 +413,8 @@ class TestPgLookout(TestCase):
         self.assertEqual(self.pglookout.current_master, "old_master")
 
         self._add_db_to_cluster_state("other", pg_last_xlog_receive_location="2/aaaaaaaa",
-                                      pg_is_in_recovery=False, connection=True, replication_time_lag=0.0)
+                                      pg_is_in_recovery=False, connection=True, replication_time_lag=0.0,
+                                      conn_info={"host": "otherhost.example.com", "port": 11111})
 
         pg_data_dir = os.path.join(self.temp_dir + os.sep + "test_pgdata")
         os.makedirs(pg_data_dir)
@@ -438,7 +440,7 @@ class TestPgLookout(TestCase):
         assert new_lines == []
         old_conn_info = get_connection_info(primary_conninfo)
         new_conn_info = get_connection_info_from_config_line(new_primary_conninfo)
-        assert new_conn_info == dict(old_conn_info, host="other")
+        assert new_conn_info == dict(old_conn_info, host="otherhost.example.com", port="11111")
 
     def test_replication_positions(self):
         standby_nodes = {

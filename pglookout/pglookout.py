@@ -168,21 +168,21 @@ class PgLookout(object):
                                self.overall_state, time.time() - start_time)
 
     def create_node_map(self, cluster_state, observer_state):
-        standby_nodes, master_node, master_host = {}, None, None
+        standby_nodes, master_node, master_instance = {}, None, None
         connected_master_nodes, disconnected_master_nodes = {}, {}
         connected_observer_nodes, disconnected_observer_nodes = {}, {}
         self.log.debug("Creating node map out of cluster_state: %r and observer_state: %r",
                        cluster_state, observer_state)
-        for host, state in cluster_state.items():
+        for instance, state in cluster_state.items():
             if 'pg_is_in_recovery' in state:
                 if state['pg_is_in_recovery']:
-                    standby_nodes[host] = state
+                    standby_nodes[instance] = state
                 elif state['connection']:
-                    connected_master_nodes[host] = state
+                    connected_master_nodes[instance] = state
                 elif not state['connection']:
-                    disconnected_master_nodes[host] = state
+                    disconnected_master_nodes[instance] = state
             else:
-                self.log.debug("No knowledge on host: %r state: %r of whether it's in recovery or not", host, state)
+                self.log.debug("No knowledge on instance: %r state: %r of whether it's in recovery or not", instance, state)
 
         for observer_name, state in observer_state.items():
             connected = state.get("connection", False)
@@ -190,38 +190,38 @@ class PgLookout(object):
                 connected_observer_nodes[observer_name] = state.get("fetch_time")
             else:
                 disconnected_observer_nodes[observer_name] = state.get("fetch_time")
-            for host, db_state in state.items():
-                if host not in cluster_state:
+            for instance, db_state in state.items():
+                if instance not in cluster_state:
                     # A single observer can observe multiple different replication clusters.
                     # Ignore data on nodes that don't belong in our own cluster
-                    self.log.debug("Ignoring node: %r since it does not belong into our own replication cluster.", host)
+                    self.log.debug("Ignoring instance: %r since it does not belong into our own replication cluster", instance)
                     continue
                 if isinstance(db_state, dict):  # other keys are "connection" and "fetch_time"
-                    own_fetch_time = parse_iso_datetime(cluster_state[host]["fetch_time"])
+                    own_fetch_time = parse_iso_datetime(cluster_state[instance]["fetch_time"])
                     observer_fetch_time = parse_iso_datetime(db_state['fetch_time'])
-                    self.log.debug("observer_name: %r, dbname: %r, state: %r, observer_fetch_time: %r",
-                                   observer_name, host, db_state, observer_fetch_time)
+                    self.log.debug("observer_name: %r, instance: %r, state: %r, observer_fetch_time: %r",
+                                   observer_name, instance, db_state, observer_fetch_time)
                     if 'pg_is_in_recovery' in db_state:
                         if db_state['pg_is_in_recovery']:
                             # we always trust ourselves the most for localhost, and
                             # in case we are actually connected to the other node
-                            if observer_fetch_time >= own_fetch_time and host != self.own_db:
-                                if host not in standby_nodes or standby_nodes[host]["connection"] is False:
-                                    standby_nodes[host] = db_state
+                            if observer_fetch_time >= own_fetch_time and instance != self.own_db:
+                                if instance not in standby_nodes or standby_nodes[instance]["connection"] is False:
+                                    standby_nodes[instance] = db_state
                         else:
-                            master_node = connected_master_nodes.get(host, {})
+                            master_node = connected_master_nodes.get(instance, {})
                             connected = master_node.get("connection", False)
                             self.log.debug("Observer: %r sees %r as master, we see: %r, same_master: %r, connection: %r",
-                                           observer_name, host, self.current_master, host == self.current_master,
+                                           observer_name, instance, self.current_master, instance == self.current_master,
                                            db_state.get('connection'))
-                            if observer_fetch_time >= own_fetch_time and host != self.own_db:
+                            if observer_fetch_time >= own_fetch_time and instance != self.own_db:
                                 if connected:
-                                    connected_master_nodes[host] = db_state
+                                    connected_master_nodes[instance] = db_state
                                 else:
-                                    disconnected_master_nodes[host] = db_state
+                                    disconnected_master_nodes[instance] = db_state
                     else:
-                        self.log.warning("No knowledge on if: %r %r from observer: %r is in recovery",
-                                         host, db_state, observer_name)
+                        self.log.warning("No knowledge on %r %r from observer: %r is in recovery",
+                                         instance, db_state, observer_name)
 
         self.connected_master_nodes = connected_master_nodes
         self.disconnected_master_nodes = disconnected_master_nodes
@@ -231,18 +231,18 @@ class PgLookout(object):
         if len(self.connected_master_nodes) == 0:
             self.log.warning("No known master node, disconnected masters: %r", list(disconnected_master_nodes))
             if len(disconnected_master_nodes) > 0:
-                master_host, master_node = list(disconnected_master_nodes.items())[0]
+                master_instance, master_node = list(disconnected_master_nodes.items())[0]
         elif len(self.connected_master_nodes) == 1:
-            master_host, master_node = list(connected_master_nodes.items())[0]
+            master_instance, master_node = list(connected_master_nodes.items())[0]
             if disconnected_master_nodes:
                 self.log.warning("Picked %r as master since %r are in a disconnected state",
-                                 master_host, disconnected_master_nodes)
+                                 master_instance, disconnected_master_nodes)
         else:
             self.create_alert_file("multiple_master_warning")
             self.log.error("More than one master node connected_master_nodes: %r, disconnected_master_nodes: %r",
                            connected_master_nodes, disconnected_master_nodes)
 
-        return master_host, master_node, standby_nodes
+        return master_instance, master_node, standby_nodes
 
     def check_cluster_state(self):
         master_node = None
@@ -252,13 +252,13 @@ class PgLookout(object):
             self.log.warning("No cluster state, probably still starting up")
             return
 
-        master_host, master_node, standby_nodes = self.create_node_map(cluster_state, observer_state)
+        master_instance, master_node, standby_nodes = self.create_node_map(cluster_state, observer_state)
 
-        if master_host and master_host != self.current_master:
-            self.log.info("New master node detected: old: %r new: %r: %r", self.current_master, master_host, master_node)
-            self.current_master = master_host
-            if self.own_db and self.own_db != master_host and self.config.get("autofollow"):
-                self.start_following_new_master(master_host)
+        if master_instance and master_instance != self.current_master:
+            self.log.info("New master node detected: old: %r new: %r: %r", self.current_master, master_instance, master_node)
+            self.current_master = master_instance
+            if self.own_db and self.own_db != master_instance and self.config.get("autofollow"):
+                self.start_following_new_master(master_instance)
 
         own_state = self.cluster_state.get(self.own_db)
 
@@ -336,11 +336,11 @@ class PgLookout(object):
     def get_replication_positions(self, standby_nodes):
         self.log.debug("Getting replication positions from: %r", standby_nodes)
         known_replication_positions = {}
-        for hostname, node_state in standby_nodes.items():
+        for instance, node_state in standby_nodes.items():
             now = datetime.datetime.utcnow()
             if node_state['connection'] and \
                 now - parse_iso_datetime(node_state['fetch_time']) < datetime.timedelta(seconds=20) and \
-                hostname not in self.never_promote_these_nodes:  # noqa # pylint: disable=line-too-long
+                instance not in self.never_promote_these_nodes:  # noqa # pylint: disable=line-too-long
                 # use pg_last_xlog_receive_location if it's available,
                 # otherwise fall back to pg_last_xlog_replay_location but
                 # note that both of them can be None.  We prefer
@@ -352,7 +352,7 @@ class PgLookout(object):
                 # pg_last_xlog_receive_location
                 lsn = node_state['pg_last_xlog_receive_location'] or node_state['pg_last_xlog_replay_location']
                 xlog_pos = convert_xlog_location_to_offset(lsn) if lsn else 0
-                known_replication_positions.setdefault(xlog_pos, set()).add(hostname)
+                known_replication_positions.setdefault(xlog_pos, set()).add(instance)
         return known_replication_positions
 
     def _have_we_been_in_contact_with_the_master_within_the_failover_timeout(self):
@@ -378,9 +378,9 @@ class PgLookout(object):
             return
 
         #  We always pick the 0th one coming out of sort, so both standbys will pick the same node for promotion
-        furthest_along_host = min(known_replication_positions[max(known_replication_positions)])
+        furthest_along_instance = min(known_replication_positions[max(known_replication_positions)])
         self.log.warning("Node that is furthest along is: %r, all replication positions were: %r",
-                         furthest_along_host, known_replication_positions)
+                         furthest_along_instance, known_replication_positions)
         total_observers = len(self.connected_observer_nodes) + len(self.disconnected_observer_nodes)
         # +1 in the calculation comes from the master node
         total_amount_of_nodes = len(standby_nodes) + 1 - len(self.never_promote_these_nodes) + total_observers
@@ -392,7 +392,7 @@ class PgLookout(object):
         self.log.debug("Size of known state: %.2f, needed majority: %r, %r/%r", size_of_known_state,
                        size_of_needed_majority, amount_of_known_replication_positions, int(total_amount_of_nodes))
 
-        if standby_nodes[furthest_along_host] == own_state:
+        if standby_nodes[furthest_along_instance] == own_state:
             if self.check_for_maintenance_mode_file():
                 self.log.warning("Canceling failover even though we were the node the furthest along, since "
                                  "this node has an existing maintenance_mode_file: %r",
@@ -406,7 +406,7 @@ class PgLookout(object):
                                  "aware of the states of enough of the other nodes")
             else:
                 start_time = time.time()
-                self.log.warning("We will now do a failover to ourselves since we were the host furthest along")
+                self.log.warning("We will now do a failover to ourselves since we were the instance furthest along")
                 return_code = self.execute_external_command(self.failover_command)
                 self.log.warning("Executed failover command: %r, return_code: %r, took: %.2fs",
                                  self.failover_command, return_code, time.time() - start_time)
@@ -419,9 +419,9 @@ class PgLookout(object):
                     self.replication_lag_over_warning_limit = False
                     self.delete_alert_file("replication_delay_warning")
         else:
-            self.log.warning("Nothing to do since node: %r is the furthest along", furthest_along_host)
+            self.log.warning("Nothing to do since node: %r is the furthest along", furthest_along_instance)
 
-    def modify_recovery_conf_to_point_at_new_master_host(self, new_master_host):
+    def modify_recovery_conf_to_point_at_new_master(self, new_master_instance):
         path_to_recovery_conf = os.path.join(self.config.get("pg_data_directory"), "recovery.conf")
         with open(path_to_recovery_conf, "r") as fp:
             old_conf = fp.read().splitlines()
@@ -442,9 +442,14 @@ class PgLookout(object):
 
         # If has_recovery_target_timeline is set and old_conn_info matches
         # new info we don't have to do anything
-        new_conn_info = dict(self.primary_conninfo_template, host=new_master_host)
+        new_conn_info = get_connection_info(self.primary_conninfo_template)
+        master_instance_conn_info = get_connection_info(self.config["remote_conns"][new_master_instance])
+        assert "host" in master_instance_conn_info
+        new_conn_info["host"] = master_instance_conn_info["host"]
+        if "port" in master_instance_conn_info:
+            new_conn_info["port"] = master_instance_conn_info["port"]
         if new_conn_info == old_conn_info and has_recovery_target_timeline:
-            self.log.debug("recovery.conf already contains conninfo matching %r, not updating", new_master_host)
+            self.log.debug("recovery.conf already contains conninfo matching %r, not updating", new_master_instance)
             return False
         # Otherwise we append the new primary_conninfo
         new_conf.append("primary_conninfo = {0}".format(adapt(create_connection_string(new_conn_info))))
@@ -452,7 +457,7 @@ class PgLookout(object):
         if not has_recovery_target_timeline:
             new_conf.append("recovery_target_timeline = 'latest'")
         # prepend our tag
-        new_conf.insert(0, "# pglookout updated primary_conninfo for host {0} at {1}".format(new_master_host, get_iso_timestamp()))
+        new_conf.insert(0, "# pglookout updated primary_conninfo for instance {0} at {1}".format(new_master_instance, get_iso_timestamp()))
         # Replace old recovery.conf with a fresh copy
         with open(path_to_recovery_conf + "_temp", "w") as fp:
             fp.write("\n".join(new_conf) + "\n")
@@ -461,19 +466,19 @@ class PgLookout(object):
         os.rename(path_to_recovery_conf + "_temp", path_to_recovery_conf)
         return True
 
-    def start_following_new_master(self, new_master_host):
+    def start_following_new_master(self, new_master_instance):
         start_time = time.time()
-        updated_config = self.modify_recovery_conf_to_point_at_new_master_host(new_master_host)
+        updated_config = self.modify_recovery_conf_to_point_at_new_master(new_master_instance)
         if not updated_config:
-            self.log.info("Already following master %r, no need to start following it again", new_master_host)
+            self.log.info("Already following master %r, no need to start following it again", new_master_instance)
             return
         start_command, stop_command = self.config.get("pg_start_command", "").split(), self.config.get("pg_stop_command", "").split()
         self.log.info("Starting to follow new master %r, modified recovery.conf and restarting PostgreSQL"
                       "; pg_stop_command %r; pg_start_command %r",
-                      new_master_host, start_command, stop_command)
+                      new_master_instance, start_command, stop_command)
         self.execute_external_command(stop_command)
         self.execute_external_command(start_command)
-        self.log.info("Started following new master %r, took: %.2fs", new_master_host, time.time() - start_time)
+        self.log.info("Started following new master %r, took: %.2fs", new_master_instance, time.time() - start_time)
 
     def execute_external_command(self, command):
         self.log.warning("Executing external command: %r", command)
