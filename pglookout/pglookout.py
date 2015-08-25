@@ -9,65 +9,39 @@ See the file `LICENSE` for details.
 """
 
 from __future__ import print_function
+from .cluster_monitor import ClusterMonitor
 from .common import (
     create_connection_string, get_connection_info, get_connection_info_from_config_line,
-    convert_xlog_location_to_offset, parse_iso_datetime, get_iso_timestamp)
-from email.utils import parsedate
+    convert_xlog_location_to_offset, parse_iso_datetime, get_iso_timestamp,
+    total_seconds, set_syslog_handler, LOG_FORMAT)
+from .webserver import WebServer
 from psycopg2.extensions import adapt
-from psycopg2.extras import RealDictCursor
-from threading import Thread
 import copy
 import datetime
-import errno
 import logging
 import logging.handlers
 import os
-import psycopg2
-import requests
-import select
 import signal
 import socket
 import subprocess
 import sys
 import time
 
-try:
-    from SocketServer import ThreadingMixIn  # pylint: disable=F0401
-    from BaseHTTPServer import HTTPServer  # pylint: disable=F0401
-    from SimpleHTTPServer import SimpleHTTPRequestHandler  # pylint: disable=F0401
-except ImportError:  # Support Py3k
-    from socketserver import ThreadingMixIn  # pylint: disable=F0401
-    from http.server import HTTPServer, SimpleHTTPRequestHandler  # pylint: disable=F0401
-
 # Prefer simplejson over json as on Python2.6 json does not play together
 # nicely with other libraries as it loads strings in unicode and for example
 # SysLogHandler does not like getting syslog facility as unicode string.
 try:
-    import simplejson as json  # pylint: disable=F0401
+    import simplejson as json  # pylint: disable=import-error
 except ImportError:
     import json
 
 try:
-    from systemd import daemon  # pylint: disable=F0401
+    from systemd import daemon  # pylint: disable=import-error
 except:
     daemon = None
 
-format_str = "%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s"
-syslog_format_str = '%(name)s %(levelname)s: %(message)s'
 
-logging.basicConfig(level=logging.DEBUG, format=format_str)
-
-
-class PglookoutTimeout(Exception):
-    pass
-
-
-def set_syslog_handler(syslog_address, syslog_facility, logger):
-    syslog_handler = logging.handlers.SysLogHandler(address=syslog_address, facility=syslog_facility)
-    logger.addHandler(syslog_handler)
-    formatter = logging.Formatter(syslog_format_str)
-    syslog_handler.setFormatter(formatter)
-    return syslog_handler
+logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
 
 class PgLookout(object):
@@ -116,7 +90,7 @@ class PgLookout(object):
         if daemon:  # If we can import systemd we always notify it
             daemon.notify("READY=1")
             self.log.info("Sent startup notification to systemd that pglookout is READY")
-        self.log.info("PGLookout initialized, own_hostname: %r, own_db: %r, cwd: %r",
+        self.log.info("PGLookout initialized, local hostname: %r, own_db: %r, cwd: %r",
                       socket.gethostname(), self.own_db, os.getcwd())
 
     def quit(self, _signal=None, _frame=None):
@@ -160,7 +134,7 @@ class PgLookout(object):
         if sys.version_info[0] >= 3:
             self.log_level = getattr(logging, log_level_name)
         else:
-            self.log_level = logging._levelNames[log_level_name]  # pylint: disable=W0212,E1101
+            self.log_level = logging._levelNames[log_level_name]  # pylint: disable=no-member,protected-access
         try:
             self.log.setLevel(self.log_level)
             if self.cluster_monitor:
@@ -223,7 +197,7 @@ class PgLookout(object):
                     self.log.debug("Ignoring node: %r since it does not belong into our own replication cluster.", host)
                     continue
                 if isinstance(db_state, dict):  # other keys are "connection" and "fetch_time"
-                    own_fetch_time = parse_iso_datetime(cluster_state.get(host, {"fetch_time": get_iso_timestamp(datetime.datetime(year=2000, month=1, day=1))})['fetch_time'])  # pylint: disable=C0301
+                    own_fetch_time = parse_iso_datetime(cluster_state[host]["fetch_time"])
                     observer_fetch_time = parse_iso_datetime(db_state['fetch_time'])
                     self.log.debug("observer_name: %r, dbname: %r, state: %r, observer_fetch_time: %r",
                                    observer_name, host, db_state, observer_fetch_time)
@@ -231,8 +205,9 @@ class PgLookout(object):
                         if db_state['pg_is_in_recovery']:
                             # we always trust ourselves the most for localhost, and
                             # in case we are actually connected to the other node
-                            if observer_fetch_time >= own_fetch_time and host != self.own_db and standby_nodes.get(host, {"connection": False})['connection'] is False:  # pylint: disable=C0301
-                                standby_nodes[host] = db_state
+                            if observer_fetch_time >= own_fetch_time and host != self.own_db:
+                                if host not in standby_nodes or standby_nodes[host]["connection"] is False:
+                                    standby_nodes[host] = db_state
                         else:
                             master_node = connected_master_nodes.get(host, {})
                             connected = master_node.get("connection", False)
@@ -254,7 +229,7 @@ class PgLookout(object):
         self.disconnected_observer_nodes = disconnected_observer_nodes
 
         if len(self.connected_master_nodes) == 0:
-            self.log.warning("No known master node, disconnected masters: %r", list(disconnected_master_nodes.keys()))
+            self.log.warning("No known master node, disconnected masters: %r", list(disconnected_master_nodes))
             if len(disconnected_master_nodes) > 0:
                 master_host, master_node = list(disconnected_master_nodes.items())[0]
         elif len(self.connected_master_nodes) == 1:
@@ -277,7 +252,7 @@ class PgLookout(object):
             self.log.warning("No cluster state, probably still starting up")
             return
 
-        master_host, master_node, standby_nodes = self.create_node_map(cluster_state, observer_state)  # pylint: disable=W0612
+        master_host, master_node, standby_nodes = self.create_node_map(cluster_state, observer_state)
 
         if master_host and master_host != self.current_master:
             self.log.info("New master node detected: old: %r new: %r: %r", self.current_master, master_host, master_node)
@@ -288,16 +263,12 @@ class PgLookout(object):
         own_state = self.cluster_state.get(self.own_db)
 
         # If we're an observer ourselves, we'll grab the IP address from HTTP server address
-        observer_info = ','.join(observer_state.keys()) or 'no'
+        observer_info = ",".join(observer_state) or "no"
         if not self.own_db:
             observer_info = self.config.get("http_address", observer_info)
-
+        standby_info = ",".join(standby_nodes) or "no"
         self.log.debug("Cluster has %s standbys, %s observers and %s as master, own_db: %r, own_state: %r",
-                       ','.join(standby_nodes.keys()) or 'no',
-                       observer_info,
-                       self.current_master,
-                       self.own_db,
-                       own_state or "observer")
+                       standby_info, observer_info, self.current_master, self.own_db, own_state or "observer")
 
         if self.own_db:
             if self.own_db == self.current_master:
@@ -369,7 +340,7 @@ class PgLookout(object):
             now = datetime.datetime.utcnow()
             if node_state['connection'] and \
                 now - parse_iso_datetime(node_state['fetch_time']) < datetime.timedelta(seconds=20) and \
-                hostname not in self.never_promote_these_nodes:  # noqa # pylint: disable=C0301
+                hostname not in self.never_promote_these_nodes:  # noqa # pylint: disable=line-too-long
                 # use pg_last_xlog_receive_location if it's available,
                 # otherwise fall back to pg_last_xlog_replay_location but
                 # note that both of them can be None.  We prefer
@@ -392,7 +363,7 @@ class PgLookout(object):
             time_since_last_contact = datetime.datetime.utcnow() - parse_iso_datetime(db_time)
             if time_since_last_contact < datetime.timedelta(seconds=self.replication_lag_failover_timeout):
                 self.log.debug("We've had contact with master: %r at: %r within the last %.2fs, not failing over",
-                               disconnected_master_node, db_time, time_since_last_contact.seconds)
+                               disconnected_master_node, db_time, total_seconds(time_since_last_contact))
                 return True
         return False
 
@@ -512,7 +483,7 @@ class PgLookout(object):
         except subprocess.CalledProcessError as err:
             self.log.exception("Problem with executing: %r, return_code: %r, output: %r",
                                command, err.returncode, err.output)
-            return_code = err.returncode  # pylint: disable=E1101
+            return_code = err.returncode  # pylint: disable=no-member
         self.log.warning("Executed external command: %r, output: %r", return_code, output)
         return return_code
 
@@ -556,225 +527,6 @@ class PgLookout(object):
         self.cluster_monitor.start()
         self.webserver.start()
         self.main_loop()
-
-
-class ThreadedWebServer(ThreadingMixIn, HTTPServer):
-    cluster_state = None
-    log = None
-
-
-class WebServer(Thread):
-    def __init__(self, config, cluster_state):
-        Thread.__init__(self)
-        self.config = config
-        self.cluster_state = cluster_state
-        self.log = logging.getLogger("WebServer")
-        self.address = self.config.get("http_address", '')
-        self.port = self.config.get("http_port", 15000)
-        self.server = None
-        self.log.debug("WebServer initialized with address: %r port: %r", self.address, self.port)
-
-    def run(self):
-        # We bind the port only when we start running
-        self.server = ThreadedWebServer((self.address, self.port), RequestHandler)
-        self.server.cluster_state = self.cluster_state
-        self.server.log = self.log
-        self.server.serve_forever()
-
-    def close(self):
-        self.log.debug("Closing WebServer")
-        self.server.shutdown()
-        self.log.debug("Closed WebServer")
-
-
-class RequestHandler(SimpleHTTPRequestHandler):
-    def do_GET(self):
-        self.server.log.debug("Got request: %r", self.path)
-        if self.path.startswith("/state.json"):
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            response = json.dumps(self.server.cluster_state, indent=4)
-            self.send_header('Content-length', len(response))
-            self.end_headers()
-            self.wfile.write(response)
-        else:
-            self.send_response(404)
-
-
-def wait_select(conn, timeout=5.0):
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        time_left = end_time - time.time()
-        state = conn.poll()
-        try:
-            if state == psycopg2.extensions.POLL_OK:
-                return
-            elif state == psycopg2.extensions.POLL_READ:
-                select.select([conn.fileno()], [], [], min(timeout, time_left))
-            elif state == psycopg2.extensions.POLL_WRITE:
-                select.select([], [conn.fileno()], [], min(timeout, time_left))
-            else:
-                raise psycopg2.OperationalError("bad state from poll: %s" % state)
-        except select.error as error:
-            if error.args[0] != errno.EINTR:
-                raise
-    raise PglookoutTimeout("timed out in wait_select")
-
-
-class ClusterMonitor(Thread):
-    def __init__(self, config, cluster_state, observer_state, create_alert_file):
-        Thread.__init__(self)
-        self.log = logging.getLogger("ClusterMonitor")
-        self.running = True
-        self.cluster_state = cluster_state
-        self.observer_state = observer_state
-        self.config = config
-        self.create_alert_file = create_alert_file
-        self.db_conns = {}
-        self.session = requests.Session()
-        if self.config.get("syslog"):
-            self.syslog_handler = set_syslog_handler(self.config.get("syslog_address", "/dev/log"),
-                                                     self.config.get("syslog_facility", "local2"),
-                                                     self.log)
-        self.log.debug("Initialized ClusterMonitor with: %r", cluster_state)
-
-    def _connect_to_db(self, hostname, dsn):
-        conn = self.db_conns.get(hostname)
-        if conn:
-            return conn
-        try:
-            self.log.debug("Connecting to hostname: %r", hostname)
-            conn = psycopg2.connect(dsn=dsn, async=True)
-            wait_select(conn)
-            self.log.debug("Connected to hostname: %r, dsn: %r", hostname, conn.dsn)
-        except psycopg2.OperationalError as ex:
-            self.log.warning("%s (%s) connecting to DB at: %r",
-                             ex.__class__.__name__, ex, hostname)
-            if hasattr(ex, "message") and 'password authentication' in ex.message:
-                self.create_alert_file("authentication_error")
-            conn = None
-        except:
-            self.log.exception("Problem in connecting to DB at: %r", hostname)
-            conn = None
-        self.db_conns[hostname] = conn
-        return conn
-
-    def _fetch_observer_state(self, hostname, uri):
-        result = {"fetch_time": get_iso_timestamp(), "connection": True}
-        try:
-            fetch_uri = uri + "/state.json"
-            response = self.session.get(fetch_uri, timeout=5.0)
-
-            # check time difference for large skews
-            remote_server_time = parsedate(response.headers['date'])
-            remote_server_time = datetime.datetime.fromtimestamp(time.mktime(remote_server_time))
-            time_diff = parse_iso_datetime(result['fetch_time']) - remote_server_time
-            if time_diff > datetime.timedelta(seconds=5):
-                self.log.error("Time difference own node: %r, observer node is: %r, response: %r, ignoring response",
-                               hostname, time_diff, response.json())  # pylint: disable=E1103
-                return
-            result.update(response.json())  # pylint: disable=E1103
-        except requests.ConnectionError as ex:
-            self.log.warning("%s (%s) fetching state from observer: %r, %r",
-                             ex.__class__.__name__, ex, hostname, fetch_uri)
-            result['connection'] = False
-        except:
-            self.log.exception("Problem in fetching state from observer: %r, %r", hostname, fetch_uri)
-            result['connection'] = False
-        return result
-
-    def fetch_observer_state(self, hostname, uri):
-        start_time = time.time()
-        result = self._fetch_observer_state(hostname, uri)
-        if result:
-            if hostname in self.observer_state:
-                self.observer_state[hostname].update(result)
-            else:
-                self.observer_state[hostname] = result
-        self.log.debug("Observer: %r state was: %r, took: %.4fs to fetch",
-                       hostname, result, time.time() - start_time)
-
-    def connect_to_cluster_nodes_and_cleanup_old_nodes(self):
-        leftover_host_conns = set(self.db_conns) - set(self.config.get("remote_conns", {}))
-        for leftover_conn_hostname in leftover_host_conns:
-            self.log.debug("Removing leftover state for: %r", leftover_conn_hostname)
-            self.db_conns.pop(leftover_conn_hostname)
-            self.cluster_state.pop(leftover_conn_hostname, "")
-            self.observer_state.pop(leftover_conn_hostname, "")
-        #  Making sure we have a connection to all currently configured db hosts
-        for hostname, connect_string in self.config.get('remote_conns', {}).items():
-            self._connect_to_db(hostname, dsn=connect_string)
-
-    def _standby_status_query(self, hostname, db_conn):
-        """Status query that is executed on the standby node"""
-        f_result = None
-        result = {"fetch_time": get_iso_timestamp(), "connection": False}
-        if not db_conn:
-            db_conn = self._connect_to_db(hostname, self.config['remote_conns'].get(hostname))
-            if not db_conn:
-                return result
-        try:
-            self.log.debug("Querying DB state for DB: %r", hostname)
-            c = db_conn.cursor(cursor_factory=RealDictCursor)
-            fields = [
-                "now() AS db_time",
-                "pg_is_in_recovery()",
-                "pg_last_xact_replay_timestamp()",
-                "pg_last_xlog_receive_location()",
-                "pg_last_xlog_replay_location()",
-            ]
-            query = "SELECT {}".format(", ".join(fields))
-            c.execute(query)
-            wait_select(c.connection)
-            f_result = c.fetchone()
-            if not f_result['pg_is_in_recovery']:
-                #  This is only run on masters to create txid traffic every db_poll_interval
-                c.execute("SELECT txid_current()")
-                wait_select(c.connection)
-        except (PglookoutTimeout, psycopg2.OperationalError, psycopg2.InterfaceError):
-            self.log.exception("Problem with hostname: %r, closing connection", hostname)
-            db_conn.close()
-            self.db_conns[hostname] = None
-
-        if f_result:
-            # abs is for catching time travel (as in going from the future to the past
-            if f_result['pg_last_xact_replay_timestamp']:
-                replication_time_lag = abs(f_result['db_time'] - f_result['pg_last_xact_replay_timestamp'])
-                f_result["replication_time_lag"] = replication_time_lag.seconds + replication_time_lag.microseconds * 10 ** -6
-                f_result['pg_last_xact_replay_timestamp'] = f_result['pg_last_xact_replay_timestamp'].isoformat() + "Z"
-
-            if not f_result['pg_is_in_recovery']:
-                # These are set to None so when we query a standby promoted to master
-                # it looks identical to the results from a master node that's never been a standby
-                f_result.update({'pg_last_xlog_receive_location': None,
-                                 'pg_last_xact_replay_timestamp': None,
-                                 'pg_last_xlog_replay_location': None,
-                                 'replication_time_lag': 0.0})
-            f_result.update({"db_time": get_iso_timestamp(f_result['db_time']), "connection": True})
-            result.update(f_result)
-        return result
-
-    def standby_status_query(self, hostname, db_conn):
-        start_time = time.time()
-        result = self._standby_status_query(hostname, db_conn)
-        self.log.debug("DB state gotten from: %r was: %r, took: %.4fs to fetch",
-                       hostname, result, time.time() - start_time)
-        if hostname in self.cluster_state:
-            self.cluster_state[hostname].update(result)
-        else:
-            self.cluster_state[hostname] = result
-
-    def run(self):
-        while self.running:
-            try:
-                self.connect_to_cluster_nodes_and_cleanup_old_nodes()
-                for hostname, db_conn in self.db_conns.items():
-                    self.standby_status_query(hostname, db_conn)
-                for hostname, uri in self.config.get('observers', {}).items():
-                    self.fetch_observer_state(hostname, uri)
-            except:
-                self.log.exception("Problem in ClusterMonitor")
-            time.sleep(self.config.get("db_poll_interval", 5.0))
 
 
 def main(args=None):

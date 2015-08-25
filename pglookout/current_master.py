@@ -14,7 +14,7 @@ import sys
 import time
 
 try:
-    import simplejson as json  # pylint: disable=F0401
+    import simplejson as json  # pylint: disable=import-error
 except ImportError:
     import json
 
@@ -30,7 +30,7 @@ def main(args=None):
     try:
         with open(args[0], "r") as fp:
             config = json.load(fp)
-        state_file_path = config.get("json_state_file_path", "/tmp/pglookout_state.json")  # pylint: disable=E1103
+        state_file_path = config.get("json_state_file_path", "/tmp/pglookout_state.json")  # pylint: disable=no-member
         if time.time() - os.stat(state_file_path).st_mtime > 60.0:
             # file older than one minute, pglookout probably dead, exit with minus one
             return -1
