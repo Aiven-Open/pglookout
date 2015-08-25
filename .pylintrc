@@ -1,20 +1,19 @@
 [MESSAGES CONTROL]
-# C0103=invalid name
-# C0111=missing docstring
-# C0301= Line too long (85/80)
-# I0011=Locally disabling
-# R0801= Similar lines in 2 files
-# R0902= Too many instance attributes (23/7)
-# R0903= too few public methods
-# R0904= too many public methods
-# R0912= too many branches
-# R0913= too many arguments
-# R0914= too many local variables
-# R0915= Too many statements (53/50)
-# W0142= star magic
-# W0702= too broad except
-disable=C0103, C0111, C0301, I0011, R0801, R0902, R0903, R0904, R0912, R0913, R0914, R0915, W0142, W0702
+disable=
+    bare-except,
+    duplicate-code,
+    invalid-name,
+    line-too-long,
+    locally-disabled,
+    missing-docstring,
+    star-args,
+    too-many-arguments,
+    too-many-branches,
+    too-many-instance-attributes,
+    too-many-locals,
+    too-many-public-methods,
+    too-many-statements
 
 [REPORTS]
+output-format=text
 reports=no
-msg-template={msg_id}:{line:3d},{column}: {obj}: {msg}

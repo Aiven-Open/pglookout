@@ -95,9 +95,9 @@ class ClusterMonitor(Thread):
             time_diff = parse_iso_datetime(result['fetch_time']) - remote_server_time
             if time_diff > datetime.timedelta(seconds=5):
                 self.log.error("Time difference own node: %r, observer node is: %r, response: %r, ignoring response",
-                               hostname, time_diff, response.json())  # pylint: disable=E1103
+                               hostname, time_diff, response.json())  # pylint: disable=no-member
                 return
-            result.update(response.json())  # pylint: disable=E1103
+            result.update(response.json())  # pylint: disable=no-member
         except requests.ConnectionError as ex:
             self.log.warning("%s (%s) fetching state from observer: %r, %r",
                              ex.__class__.__name__, ex, hostname, fetch_uri)

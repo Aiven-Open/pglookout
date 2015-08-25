@@ -15,17 +15,17 @@ from threading import Thread
 # nicely with other libraries as it loads strings in unicode and for example
 # SysLogHandler does not like getting syslog facility as unicode string.
 try:
-    import simplejson as json  # pylint: disable=F0401
+    import simplejson as json  # pylint: disable=import-error
 except ImportError:
     import json
 
 try:
-    from SocketServer import ThreadingMixIn  # pylint: disable=F0401
-    from BaseHTTPServer import HTTPServer  # pylint: disable=F0401
-    from SimpleHTTPServer import SimpleHTTPRequestHandler  # pylint: disable=F0401
+    from SocketServer import ThreadingMixIn  # pylint: disable=import-error
+    from BaseHTTPServer import HTTPServer  # pylint: disable=import-error
+    from SimpleHTTPServer import SimpleHTTPRequestHandler  # pylint: disable=import-error
 except ImportError:  # Support Py3k
-    from socketserver import ThreadingMixIn  # pylint: disable=F0401
-    from http.server import HTTPServer, SimpleHTTPRequestHandler  # pylint: disable=F0401
+    from socketserver import ThreadingMixIn  # pylint: disable=import-error
+    from http.server import HTTPServer, SimpleHTTPRequestHandler  # pylint: disable=import-error
 
 
 class ThreadedWebServer(ThreadingMixIn, HTTPServer):

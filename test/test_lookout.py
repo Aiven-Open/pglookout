@@ -13,9 +13,9 @@ from pglookout.common import (
     get_iso_timestamp)
 from pglookout.pglookout import PgLookout
 try:
-    from mock import Mock  # pylint: disable=F0401
+    from mock import Mock  # pylint: disable=import-error
 except:  # py3k import location
-    from unittest.mock import Mock  # pylint: disable=F0401,E0611
+    from unittest.mock import Mock  # pylint: disable=import-error,no-name-in-module
 from unittest import TestCase
 import datetime
 import os
@@ -42,8 +42,8 @@ def _create_db_node_state(pg_last_xlog_receive_location=None, pg_is_in_recovery=
 class TestClusterMonitor(TestCase):
     def setUp(self):
         self.pglookout = PgLookout("pglookout.json")
-        self.original_connect_to_db = self.pglookout.cluster_monitor._connect_to_db   # pylint: disable=W0212
-        self.pglookout.cluster_monitor._connect_to_db = Mock()  # pylint: disable=W0212
+        self.original_connect_to_db = self.pglookout.cluster_monitor._connect_to_db   # pylint: disable=protected-access
+        self.pglookout.cluster_monitor._connect_to_db = Mock()  # pylint: disable=protected-access
 
     def test_connect_to_cluster_nodes_and_cleanup_old_nodes(self):
         self.pglookout.cluster_monitor.db_conns = {"1.2.3.4": "bar", "2.3.4.5": "foo", "3.4.5.6": "foo", None: "foo"}
@@ -51,7 +51,7 @@ class TestClusterMonitor(TestCase):
         self.assertEqual(self.pglookout.cluster_monitor.db_conns, {"1.2.3.4": "bar", "2.3.4.5": "foo"})
 
     def tearDown(self):
-        self.pglookout.cluster_monitor._connect_to_db = self.original_connect_to_db   # pylint: disable=W0212
+        self.pglookout.cluster_monitor._connect_to_db = self.original_connect_to_db   # pylint: disable=protected-access
 
 
 class TestPgLookout(TestCase):

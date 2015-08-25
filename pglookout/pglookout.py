@@ -31,12 +31,12 @@ import time
 # nicely with other libraries as it loads strings in unicode and for example
 # SysLogHandler does not like getting syslog facility as unicode string.
 try:
-    import simplejson as json  # pylint: disable=F0401
+    import simplejson as json  # pylint: disable=import-error
 except ImportError:
     import json
 
 try:
-    from systemd import daemon  # pylint: disable=F0401
+    from systemd import daemon  # pylint: disable=import-error
 except:
     daemon = None
 
@@ -134,7 +134,7 @@ class PgLookout(object):
         if sys.version_info[0] >= 3:
             self.log_level = getattr(logging, log_level_name)
         else:
-            self.log_level = logging._levelNames[log_level_name]  # pylint: disable=W0212,E1101
+            self.log_level = logging._levelNames[log_level_name]  # pylint: disable=no-member,protected-access
         try:
             self.log.setLevel(self.log_level)
             if self.cluster_monitor:
@@ -340,7 +340,7 @@ class PgLookout(object):
             now = datetime.datetime.utcnow()
             if node_state['connection'] and \
                 now - parse_iso_datetime(node_state['fetch_time']) < datetime.timedelta(seconds=20) and \
-                hostname not in self.never_promote_these_nodes:  # noqa # pylint: disable=C0301
+                hostname not in self.never_promote_these_nodes:  # noqa # pylint: disable=line-too-long
                 # use pg_last_xlog_receive_location if it's available,
                 # otherwise fall back to pg_last_xlog_replay_location but
                 # note that both of them can be None.  We prefer
@@ -483,7 +483,7 @@ class PgLookout(object):
         except subprocess.CalledProcessError as err:
             self.log.exception("Problem with executing: %r, return_code: %r, output: %r",
                                command, err.returncode, err.output)
-            return_code = err.returncode  # pylint: disable=E1101
+            return_code = err.returncode  # pylint: disable=no-member
         self.log.warning("Executed external command: %r, output: %r", return_code, output)
         return return_code
 
