@@ -1,10 +1,11 @@
 short_ver = 1.2.0
 long_ver = $(shell git describe --long 2>/dev/null || echo $(short_ver)-0-unknown-g`git describe --always`)
 
-all: py-egg
-
 PYTHON ?= python
 PYLINT_DIRS = pglookout/ test/
+
+all:
+	: 'try "make rpm" or "make deb" or "make test"'
 
 test: pylint unittest
 
