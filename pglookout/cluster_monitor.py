@@ -8,7 +8,9 @@ This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
 
-from .common import parse_iso_datetime, get_iso_timestamp, total_seconds, set_syslog_handler
+from .common import (
+    mask_connection_info, get_iso_timestamp, parse_iso_datetime,
+    set_syslog_handler, total_seconds)
 from email.utils import parsedate
 from psycopg2.extras import RealDictCursor
 from threading import Thread
@@ -66,19 +68,21 @@ class ClusterMonitor(Thread):
         conn = self.db_conns.get(instance)
         if conn:
             return conn
+        inst_info_str = "{0!r} ({1})".format(instance, mask_connection_info(dsn))
         try:
-            self.log.debug("Connecting to instance: %r", instance)
+            self.log.info("Connecting to %s", inst_info_str)
             conn = psycopg2.connect(dsn=dsn, async=True)
             wait_select(conn)
-            self.log.debug("Connected to instance: %r, dsn: %r", instance, conn.dsn)
-        except psycopg2.OperationalError as ex:
-            self.log.warning("%s (%s) connecting to DB at: %r",
-                             ex.__class__.__name__, ex, instance)
-            if hasattr(ex, "message") and 'password authentication' in ex.message:
+            self.log.debug("Connected to %s", inst_info_str)
+        except (PglookoutTimeout, psycopg2.OperationalError) as ex:
+            self.log.warning("%s (%s) connecting to %s (%s)",
+                             ex.__class__.__name__, ex, instance, inst_info_str)
+            if "password authentication" in getattr(ex, "message", ""):
                 self.create_alert_file("authentication_error")
-            conn = None
+            conn = None  # make sure we don't try to use the connection if we timed out
         except:
-            self.log.exception("Problem in connecting to DB at: %r", instance)
+            self.log.exception("Failed to connect to %s (%s)",
+                               instance, inst_info_str)
             conn = None
         self.db_conns[instance] = conn
         return conn
@@ -138,7 +142,8 @@ class ClusterMonitor(Thread):
             if not db_conn:
                 return result
         try:
-            self.log.debug("Querying DB state for DB: %r", instance)
+            phase = "querying status from"
+            self.log.debug("%s %r", phase, instance)
             c = db_conn.cursor(cursor_factory=RealDictCursor)
             fields = [
                 "now() AS db_time",
@@ -152,11 +157,13 @@ class ClusterMonitor(Thread):
             wait_select(c.connection)
             f_result = c.fetchone()
             if not f_result['pg_is_in_recovery']:
-                #  This is only run on masters to create txid traffic every db_poll_interval
+                # This is only run on masters to create txid traffic every db_poll_interval
+                phase = "updating transaction on"
+                self.log.debug("%s %r", phase, instance)
                 c.execute("SELECT txid_current()")
                 wait_select(c.connection)
-        except (PglookoutTimeout, psycopg2.OperationalError, psycopg2.InterfaceError):
-            self.log.exception("Problem with instance: %r, closing connection", instance)
+        except (PglookoutTimeout, psycopg2.OperationalError, psycopg2.InterfaceError) as ex:
+            self.log.warning("%s (%s) %s %s", ex.__class__.__name__, ex, phase, instance)
             db_conn.close()
             self.db_conns[instance] = None
 
