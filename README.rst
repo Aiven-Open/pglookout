@@ -130,7 +130,7 @@ installation.
 5. Now copy the same ``pglookout.json`` configuration to the slave
    and possible observer nodes but you need to edit the configuration
    on the other nodes so that the ``own_db`` configuration
-   variable matches the node's address given in the ``remote_conns`` as the key.
+   variable matches the ``remote_conns`` key of the node.
    For observer nodes, you can leave it as an empty '' value, since they
    don't have a DB of their own.
 
@@ -211,10 +211,12 @@ be polled for information on DB replication state.
 ``remote_conns`` (default ``{}``)
 
 PG database connection strings that the pglookout process should monitor.
+Keys of the object should be names of the remotes and values must be valid
+PostgreSQL connection strings or connection info objects.
 
 ``primary_conninfo_template``
 
-Connection string or connection info dict template to use when setting a new
+Connection string or connection info object template to use when setting a new
 primary_conninfo value for recovery.conf after a failover has happened.  Any
 provided hostname and database name in the template is ignored and they are
 replaced with a replication connection to the new master node.
@@ -287,8 +289,7 @@ Shell command to be executed once replication lag is warning_replication_time_la
 
 ``own_db``
 
-This is how pglookout determines which one of the dbs listed, is it's
-own.
+The key of the entry in ``remote_conns`` that matches this node.
 
 ``log_level`` (default ``"INFO"``)
 

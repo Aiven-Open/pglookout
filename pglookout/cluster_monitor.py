@@ -8,7 +8,9 @@ This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
 
-from .common import parse_iso_datetime, get_iso_timestamp, total_seconds, set_syslog_handler
+from .common import (
+    mask_connection_info, get_iso_timestamp, parse_iso_datetime,
+    set_syslog_handler, total_seconds)
 from email.utils import parsedate
 from psycopg2.extras import RealDictCursor
 from threading import Thread
@@ -62,28 +64,34 @@ class ClusterMonitor(Thread):
                                                      self.log)
         self.log.debug("Initialized ClusterMonitor with: %r", cluster_state)
 
-    def _connect_to_db(self, hostname, dsn):
-        conn = self.db_conns.get(hostname)
+    def _connect_to_db(self, instance, dsn):
+        conn = self.db_conns.get(instance)
         if conn:
             return conn
+        if not dsn:
+            self.log.warning("Can't connect to %s, dsn is %r", instance, dsn)
+            return None
+        inst_info_str = "{0!r} ({1})".format(instance, mask_connection_info(dsn))
         try:
-            self.log.debug("Connecting to hostname: %r", hostname)
+            self.log.info("Connecting to %s", inst_info_str)
             conn = psycopg2.connect(dsn=dsn, async=True)
             wait_select(conn)
-            self.log.debug("Connected to hostname: %r, dsn: %r", hostname, conn.dsn)
-        except psycopg2.OperationalError as ex:
-            self.log.warning("%s (%s) connecting to DB at: %r",
-                             ex.__class__.__name__, ex, hostname)
-            if hasattr(ex, "message") and 'password authentication' in ex.message:
+            self.log.debug("Connected to %s", inst_info_str)
+        except (PglookoutTimeout, psycopg2.OperationalError) as ex:
+            self.log.warning("%s (%s) connecting to %s (%s)",
+                             ex.__class__.__name__, str(ex).strip(),
+                             instance, inst_info_str)
+            if "password authentication" in getattr(ex, "message", ""):
                 self.create_alert_file("authentication_error")
-            conn = None
+            conn = None  # make sure we don't try to use the connection if we timed out
         except:
-            self.log.exception("Problem in connecting to DB at: %r", hostname)
+            self.log.exception("Failed to connect to %s (%s)",
+                               instance, inst_info_str)
             conn = None
-        self.db_conns[hostname] = conn
+        self.db_conns[instance] = conn
         return conn
 
-    def _fetch_observer_state(self, hostname, uri):
+    def _fetch_observer_state(self, instance, uri):
         result = {"fetch_time": get_iso_timestamp(), "connection": True}
         try:
             fetch_uri = uri + "/state.json"
@@ -94,51 +102,52 @@ class ClusterMonitor(Thread):
             remote_server_time = datetime.datetime.fromtimestamp(time.mktime(remote_server_time))
             time_diff = parse_iso_datetime(result['fetch_time']) - remote_server_time
             if time_diff > datetime.timedelta(seconds=5):
-                self.log.error("Time difference own node: %r, observer node is: %r, response: %r, ignoring response",
-                               hostname, time_diff, response.json())  # pylint: disable=no-member
+                self.log.error("Time difference between us and observer node %r is %r, response: %r, ignoring response",
+                               instance, time_diff, response.json())  # pylint: disable=no-member
                 return
             result.update(response.json())  # pylint: disable=no-member
         except requests.ConnectionError as ex:
             self.log.warning("%s (%s) fetching state from observer: %r, %r",
-                             ex.__class__.__name__, ex, hostname, fetch_uri)
+                             ex.__class__.__name__, ex, instance, fetch_uri)
             result['connection'] = False
         except:
-            self.log.exception("Problem in fetching state from observer: %r, %r", hostname, fetch_uri)
+            self.log.exception("Problem in fetching state from observer: %r, %r", instance, fetch_uri)
             result['connection'] = False
         return result
 
-    def fetch_observer_state(self, hostname, uri):
+    def fetch_observer_state(self, instance, uri):
         start_time = time.time()
-        result = self._fetch_observer_state(hostname, uri)
+        result = self._fetch_observer_state(instance, uri)
         if result:
-            if hostname in self.observer_state:
-                self.observer_state[hostname].update(result)
+            if instance in self.observer_state:
+                self.observer_state[instance].update(result)
             else:
-                self.observer_state[hostname] = result
+                self.observer_state[instance] = result
         self.log.debug("Observer: %r state was: %r, took: %.4fs to fetch",
-                       hostname, result, time.time() - start_time)
+                       instance, result, time.time() - start_time)
 
     def connect_to_cluster_nodes_and_cleanup_old_nodes(self):
-        leftover_host_conns = set(self.db_conns) - set(self.config.get("remote_conns", {}))
-        for leftover_conn_hostname in leftover_host_conns:
-            self.log.debug("Removing leftover state for: %r", leftover_conn_hostname)
-            self.db_conns.pop(leftover_conn_hostname)
-            self.cluster_state.pop(leftover_conn_hostname, "")
-            self.observer_state.pop(leftover_conn_hostname, "")
+        leftover_conns = set(self.db_conns) - set(self.config.get("remote_conns", {}))
+        for leftover_instance in leftover_conns:
+            self.log.debug("Removing leftover state for: %r", leftover_instance)
+            self.db_conns.pop(leftover_instance)
+            self.cluster_state.pop(leftover_instance, "")
+            self.observer_state.pop(leftover_instance, "")
         #  Making sure we have a connection to all currently configured db hosts
-        for hostname, connect_string in self.config.get('remote_conns', {}).items():
-            self._connect_to_db(hostname, dsn=connect_string)
+        for instance, connect_string in self.config.get("remote_conns", {}).items():
+            self._connect_to_db(instance, dsn=connect_string)
 
-    def _standby_status_query(self, hostname, db_conn):
+    def _standby_status_query(self, instance, db_conn):
         """Status query that is executed on the standby node"""
         f_result = None
         result = {"fetch_time": get_iso_timestamp(), "connection": False}
         if not db_conn:
-            db_conn = self._connect_to_db(hostname, self.config['remote_conns'].get(hostname))
+            db_conn = self._connect_to_db(instance, self.config["remote_conns"].get(instance))
             if not db_conn:
                 return result
         try:
-            self.log.debug("Querying DB state for DB: %r", hostname)
+            phase = "querying status from"
+            self.log.debug("%s %r", phase, instance)
             c = db_conn.cursor(cursor_factory=RealDictCursor)
             fields = [
                 "now() AS db_time",
@@ -152,13 +161,15 @@ class ClusterMonitor(Thread):
             wait_select(c.connection)
             f_result = c.fetchone()
             if not f_result['pg_is_in_recovery']:
-                #  This is only run on masters to create txid traffic every db_poll_interval
+                # This is only run on masters to create txid traffic every db_poll_interval
+                phase = "updating transaction on"
+                self.log.debug("%s %r", phase, instance)
                 c.execute("SELECT txid_current()")
                 wait_select(c.connection)
-        except (PglookoutTimeout, psycopg2.OperationalError, psycopg2.InterfaceError):
-            self.log.exception("Problem with hostname: %r, closing connection", hostname)
+        except (PglookoutTimeout, psycopg2.DatabaseError, psycopg2.InterfaceError, psycopg2.OperationalError) as ex:
+            self.log.warning("%s (%s) %s %s", ex.__class__.__name__, str(ex).strip(), phase, instance)
             db_conn.close()
-            self.db_conns[hostname] = None
+            self.db_conns[instance] = None
 
         result.update(self._parse_status_query_result(f_result))
         return result
@@ -185,24 +196,24 @@ class ClusterMonitor(Thread):
         result.update({"db_time": get_iso_timestamp(result["db_time"]), "connection": True})
         return result
 
-    def standby_status_query(self, hostname, db_conn):
+    def standby_status_query(self, instance, db_conn):
         start_time = time.time()
-        result = self._standby_status_query(hostname, db_conn)
+        result = self._standby_status_query(instance, db_conn)
         self.log.debug("DB state gotten from: %r was: %r, took: %.4fs to fetch",
-                       hostname, result, time.time() - start_time)
-        if hostname in self.cluster_state:
-            self.cluster_state[hostname].update(result)
+                       instance, result, time.time() - start_time)
+        if instance in self.cluster_state:
+            self.cluster_state[instance].update(result)
         else:
-            self.cluster_state[hostname] = result
+            self.cluster_state[instance] = result
 
     def run(self):
         while self.running:
             try:
                 self.connect_to_cluster_nodes_and_cleanup_old_nodes()
-                for hostname, db_conn in self.db_conns.items():
-                    self.standby_status_query(hostname, db_conn)
-                for hostname, uri in self.config.get('observers', {}).items():
-                    self.fetch_observer_state(hostname, uri)
+                for instance, db_conn in self.db_conns.items():
+                    self.standby_status_query(instance, db_conn)
+                for instance, uri in self.config.get("observers", {}).items():
+                    self.fetch_observer_state(instance, uri)
             except:
                 self.log.exception("Problem in ClusterMonitor")
             time.sleep(self.config.get("db_poll_interval", 5.0))
