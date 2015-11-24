@@ -36,6 +36,11 @@ except ImportError:
     import json
 
 try:
+    from queue import Queue
+except ImportError:
+    from Queue import Queue
+
+try:
     from systemd import daemon  # pylint: disable=import-error
 except:
     daemon = None
@@ -60,6 +65,7 @@ class PgLookout(object):
         self.disconnected_observer_nodes = {}
         self.replication_lag_warning_boundary = None
         self.replication_lag_failover_timeout = None
+        self.missing_master_from_config_timeout = None
         self.own_db = None
         self.current_master = None
         self.failover_command = None
@@ -69,6 +75,7 @@ class PgLookout(object):
         self.cluster_monitor = None
         self.syslog_handler = None
         self.cluster_nodes_change_time = time.time()
+        self.trigger_check_queue = Queue()
         self.load_config()
 
         signal.signal(signal.SIGHUP, self.load_config)
@@ -82,7 +89,8 @@ class PgLookout(object):
                               "replication_lag_over_warning": self.replication_lag_over_warning_limit}
 
         self.cluster_monitor = ClusterMonitor(self.config, self.cluster_state,
-                                              self.observer_state, self.create_alert_file)
+                                              self.observer_state, self.create_alert_file,
+                                              trigger_check_queue=self.trigger_check_queue)
         # cluster_monitor doesn't exist at the time of reading the config initially
         self.cluster_monitor.log.setLevel(self.log_level)
         self.webserver = WebServer(self.config, self.cluster_state)
@@ -148,7 +156,9 @@ class PgLookout(object):
         self.over_warning_limit_command = self.config.get("over_warning_limit_command")
         self.replication_lag_warning_boundary = self.config.get("warning_replication_time_lag", 30.0)
         self.replication_lag_failover_timeout = self.config.get("max_failover_replication_time_lag", 120.0)
+        self.missing_master_from_config_timeout = self.config.get("missing_master_from_config_timeout", 15.0)
         self.log.debug("Loaded config: %r from: %r", self.config, self.config_path)
+        self.trigger_check_queue.put("new config came, recheck")
 
     def write_cluster_state_to_json_file(self):
         """Periodically write a JSON state file to disk"""
@@ -287,12 +297,14 @@ class PgLookout(object):
             self.log.warning("No master node in cluster, %r standby nodes exist, %.2f seconds since last cluster config update, failover timeout set to %r seconds",
                              len(standby_nodes), time.time() - self.cluster_nodes_change_time, self.replication_lag_failover_timeout)
             if self.current_master:
-                # we've seen a master at some point in time, but now it's
-                # missing, perform an immediate failover to promote one of
-                # the standbys
-                self.log.warning("Performing failover decision because existing master node disappeared from configuration")
-                self.do_failover_decision(own_state, standby_nodes)
-                return
+                self.trigger_check_queue.put("Master is missing, ask for immediate state check")
+                if (time.time() - self.cluster_nodes_change_time) >= self.missing_master_from_config_timeout:
+                    # we've seen a master at some point in time, but now it's
+                    # missing, perform an immediate failover to promote one of
+                    # the standbys
+                    self.log.warning("Performing failover decision because existing master node disappeared from configuration")
+                    self.do_failover_decision(own_state, standby_nodes)
+                    return
             elif (time.time() - self.cluster_nodes_change_time) >= self.replication_lag_failover_timeout:
                 # we've never seen a master and more than failover_timeout
                 # seconds have passed since last config load (and start of

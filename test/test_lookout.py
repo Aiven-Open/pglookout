@@ -239,6 +239,12 @@ class TestPgLookout(TestCase):
         # failover
         self.pglookout.current_master = "something obsolete"
         self.pglookout.check_cluster_state()
+        # No failover yet since we're  not over missing_master_from_config_timeout
+        assert self.pglookout.execute_external_command.call_count == 0
+
+        self.pglookout.cluster_nodes_change_time = time.time() - self.pglookout.missing_master_from_config_timeout
+        self.pglookout.current_master = "something obsolete"
+        self.pglookout.check_cluster_state()
         assert self.pglookout.execute_external_command.call_count == 1
 
     def test_failover_with_no_master_timeout(self):
