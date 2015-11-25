@@ -23,9 +23,9 @@ import select
 import time
 
 try:
-    from queue import Empty
+    from queue import Empty  # pylint: disable=import-error
 except ImportError:
-    from Queue import Empty
+    from Queue import Empty  # pylint: disable=import-error
 
 class PglookoutTimeout(Exception):
     pass

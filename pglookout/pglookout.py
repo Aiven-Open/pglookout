@@ -36,9 +36,9 @@ except ImportError:
     import json
 
 try:
-    from queue import Queue
+    from queue import Queue  # pylint: disable=import-error
 except ImportError:
-    from Queue import Queue
+    from Queue import Queue  # pylint: disable=import-error
 
 try:
     from systemd import daemon  # pylint: disable=import-error
