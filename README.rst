@@ -253,6 +253,12 @@ Time to sleep after a failover command has been issued.
 If a file exists in this location, this node will not be considered
 for promotion to master.
 
+``missing_master_from_config_timeout`` (default ``15``)
+
+In seconds the amount of time before we do a failover decision if a
+previously existing master has been removed from the config file and
+we have gotten a SIGHUP.
+
 ``alert_file_dir`` (default ``os.getcwd()``)
 
 Directory in which alert files for replication warning and failover

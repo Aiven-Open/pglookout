@@ -22,6 +22,10 @@ import requests
 import select
 import time
 
+try:
+    from queue import Empty
+except ImportError:
+    from Queue import Empty
 
 class PglookoutTimeout(Exception):
     pass
@@ -48,7 +52,7 @@ def wait_select(conn, timeout=5.0):
 
 
 class ClusterMonitor(Thread):
-    def __init__(self, config, cluster_state, observer_state, create_alert_file):
+    def __init__(self, config, cluster_state, observer_state, create_alert_file, trigger_check_queue):
         Thread.__init__(self)
         self.log = logging.getLogger("ClusterMonitor")
         self.running = True
@@ -57,6 +61,7 @@ class ClusterMonitor(Thread):
         self.config = config
         self.create_alert_file = create_alert_file
         self.db_conns = {}
+        self.trigger_check_queue = trigger_check_queue
         self.session = requests.Session()
         if self.config.get("syslog"):
             self.syslog_handler = set_syslog_handler(self.config.get("syslog_address", "/dev/log"),
@@ -216,4 +221,7 @@ class ClusterMonitor(Thread):
                     self.fetch_observer_state(instance, uri)
             except:
                 self.log.exception("Problem in ClusterMonitor")
-            time.sleep(self.config.get("db_poll_interval", 5.0))
+            try:
+                self.trigger_check_queue.get(timeout=self.config.get("db_poll_interval", 5.0))
+            except Empty:
+                pass
