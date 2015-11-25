@@ -27,6 +27,7 @@ try:
 except ImportError:
     from Queue import Empty  # pylint: disable=import-error
 
+
 class PglookoutTimeout(Exception):
     pass
 
