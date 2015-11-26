@@ -551,8 +551,6 @@ class TestPgLookout(TestCase):
         self.assertEqual(list(standby_nodes.keys())[0], "10.255.255.8")
 
     def test_standbys_failover_equal_replication_positions(self):
-        self.pglookout.current_master = "192.168.57.180"
-        self.pglookout.own_db = "192.168.54.183"
         now = get_iso_timestamp(datetime.datetime.utcnow())
         self.pglookout.cluster_state = {
             "192.168.54.183": {
@@ -586,5 +584,13 @@ class TestPgLookout(TestCase):
                 "replication_time_lag": 401.104655,
             },
         }
+        self.pglookout.current_master = "192.168.57.180"
+        # We select the node with the "highest" identifier so call_count should stay zero if we're not the
+        # highest standby currently.
+        self.pglookout.own_db = "192.168.54.183"
+        self.pglookout.check_cluster_state()
+        self.assertEqual(self.pglookout.execute_external_command.call_count, 0)
+        # If we're the highest we should see call_count increment
+        self.pglookout.own_db = "192.168.63.4"
         self.pglookout.check_cluster_state()
         self.assertEqual(self.pglookout.execute_external_command.call_count, 1)
