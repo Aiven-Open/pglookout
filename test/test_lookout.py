@@ -477,66 +477,120 @@ class TestPgLookout(TestCase):
         assert self.pglookout.get_replication_positions(standby_nodes) == positions
 
     def test_node_map(self):
-        cluster_state = {'10.255.255.10': {'fetch_time': '2014-08-28T14:26:51.066368Z',
-                                           'pg_last_xlog_receive_location': '0/9000090',
-                                           'pg_is_in_recovery': False,
-                                           'pg_last_xact_replay_timestamp': '2014-08-28T14:05:43.577357+00:00Z',
-                                           'connection': True, 'pg_last_xlog_replay_location': '0/9000090',
-                                           'replication_time_lag': 1267.489727,
-                                           'db_time': '2014-08-28T14:26:51.067084+00:00Z'},
-                         '10.255.255.9': {'connection': False, 'fetch_time': '2014-08-28T14:26:51.068151Z'}}
-        observer_state = {'10.255.255.11':
-                          {'connection': True, 'fetch_time': '2014-08-28T14:26:51.069891Z',
-                           '10.255.255.10': {'fetch_time': '2014-08-28T14:26:47.104849Z',
-                                             'pg_last_xlog_receive_location': '0/9000090',
-                                             'pg_is_in_recovery': False,
-                                             'pg_last_xact_replay_timestamp': '2014-08-28T14:05:43.577357+00:00Z',
-                                             'connection': True, 'pg_last_xlog_replay_location': '0/9000090',
-                                             'replication_time_lag': 1263.528544,
-                                             'db_time': '2014-08-28T14:26:47.105901+00:00Z'},
-                           '10.255.255.9': {'fetch_time': '2014-08-28T14:26:47.107115Z',
-                                            'pg_last_xlog_receive_location': None,
-                                            'pg_is_in_recovery': False, 'pg_last_xact_replay_timestamp': None,
-                                            'connection': False, 'pg_last_xlog_replay_location': None,
-                                            'db_time': '2014-08-28T14:06:15.172820+00:00Z'}}}
+        cluster_state = {
+            "10.255.255.10": {
+                "connection": True,
+                "db_time": "2014-08-28T14:26:51.067084+00:00Z",
+                "fetch_time": "2014-08-28T14:26:51.066368Z",
+                "pg_is_in_recovery": False,
+                "pg_last_xact_replay_timestamp": "2014-08-28T14:05:43.577357+00:00Z",
+                "pg_last_xlog_receive_location": "0/9000090",
+                "pg_last_xlog_replay_location": "0/9000090",
+                "replication_time_lag": 1267.489727,
+            },
+            "10.255.255.9": {
+                "connection": False,
+                "fetch_time": "2014-08-28T14:26:51.068151Z",
+            }
+        }
+        observer_state = {
+            "10.255.255.11": {
+                "10.255.255.10": {
+                    "connection": True,
+                    "db_time": "2014-08-28T14:26:47.105901+00:00Z",
+                    "fetch_time": "2014-08-28T14:26:47.104849Z",
+                    "pg_is_in_recovery": False,
+                    "pg_last_xact_replay_timestamp": "2014-08-28T14:05:43.577357+00:00Z",
+                    "pg_last_xlog_receive_location": "0/9000090",
+                    "pg_last_xlog_replay_location": "0/9000090",
+                    "replication_time_lag": 1263.528544,
+                },
+                "10.255.255.9": {
+                    "connection": False,
+                    "db_time": "2014-08-28T14:06:15.172820+00:00Z",
+                    "fetch_time": "2014-08-28T14:26:47.107115Z",
+                    "pg_is_in_recovery": False,
+                    "pg_last_xact_replay_timestamp": None,
+                    "pg_last_xlog_receive_location": None,
+                    "pg_last_xlog_replay_location": None,
+                },
+                "connection": True,
+                "fetch_time": "2014-08-28T14:26:51.069891Z",
+            }
+        }
         master_host, _, standby_nodes = self.pglookout.create_node_map(cluster_state, observer_state)
         self.assertEqual(master_host, "10.255.255.10")
         self.assertEqual(standby_nodes, {})
 
     def test_node_map_disconnected_current_master(self):
         self.pglookout.current_master = "10.255.255.7"
-        cluster_state = {'10.255.255.7': {'fetch_time': '2014-09-07T15:26:34.736495Z', 'pg_last_xlog_receive_location': None,
-                                          'pg_is_in_recovery': False, 'pg_last_xact_replay_timestamp': None, 'connection': False,
-                                          'pg_last_xlog_replay_location': None, 'db_time': '2014-09-07T15:26:23.957151+00:00Z'},
-                         '10.255.255.8': {'fetch_time': '2014-09-07T15:26:23.919281Z',
-                                          'pg_last_xlog_receive_location': '0/74713D8',
-                                          'pg_is_in_recovery': True,
-                                          'pg_last_xact_replay_timestamp': '2014-09-07T15:25:40.372936+00:00Z',
-                                          'connection': True, 'pg_last_xlog_replay_location': '0/74713D8',
-                                          'replication_time_lag': 43.586525000000002,
-                                          'db_time': '2014-09-07T15:26:23.959461+00:00Z'}}
+        cluster_state = {
+            "10.255.255.7": {
+                "connection": False,
+                "db_time": "2014-09-07T15:26:23.957151+00:00Z",
+                "fetch_time": "2014-09-07T15:26:34.736495Z",
+                "pg_is_in_recovery": False,
+                "pg_last_xact_replay_timestamp": None,
+                "pg_last_xlog_receive_location": None,
+                "pg_last_xlog_replay_location": None,
+            },
+            "10.255.255.8": {
+                "connection": True,
+                "db_time": "2014-09-07T15:26:23.959461+00:00Z",
+                "fetch_time": "2014-09-07T15:26:23.919281Z",
+                "pg_is_in_recovery": True,
+                "pg_last_xact_replay_timestamp": "2014-09-07T15:25:40.372936+00:00Z",
+                "pg_last_xlog_receive_location": "0/74713D8",
+                "pg_last_xlog_replay_location": "0/74713D8",
+                "replication_time_lag": 43.586525,
+            }
+        }
         observer_state = {}
         master_host, _, standby_nodes = self.pglookout.create_node_map(cluster_state, observer_state)
         self.assertEqual(master_host, "10.255.255.7")
         self.assertEqual(list(standby_nodes.keys())[0], "10.255.255.8")
 
     def test_standbys_failover_equal_replication_positions(self):
-        self.pglookout.current_master = "192.168.57.180"
-        self.pglookout.own_db = "192.168.54.183"
         now = get_iso_timestamp(datetime.datetime.utcnow())
-        self.pglookout.cluster_state = {'192.168.57.180': {'connection': False, 'fetch_time': now,
-                                                           'pg_last_xlog_receive_location': None, 'db_time': '2015-04-28T11:21:55.830432Z',
-                                                           'pg_is_in_recovery': False, 'replication_time_lag': 0.0,
-                                                           'pg_last_xlog_replay_location': None, 'pg_last_xact_replay_timestamp': None},
-                                        '192.168.63.4': {'connection': True, 'fetch_time': now,
-                                                         'pg_last_xlog_receive_location': '0/70004D8', 'db_time': now,
-                                                         'pg_is_in_recovery': True, 'replication_time_lag': 401.104655,
-                                                         'pg_last_xlog_replay_location': '0/70004D8',
-                                                         'pg_last_xact_replay_timestamp': '2015-04-28T11:21:56.098946+00:00Z'},
-                                        '192.168.54.183': {'connection': True, 'fetch_time': now,
-                                                           'pg_last_xlog_receive_location': '0/70004D8', 'db_time': now,
-                                                           'pg_is_in_recovery': True, 'replication_time_lag': 400.435871,
-                                                           'pg_last_xlog_replay_location': '0/70004D8',
-                                                           'pg_last_xact_replay_timestamp': '2015-04-28T11:21:56.098946+00:00Z'}}
+        self.pglookout.cluster_state = {
+            "192.168.54.183": {
+                "connection": True,
+                "db_time": now,
+                "fetch_time": now,
+                "pg_is_in_recovery": True,
+                "pg_last_xact_replay_timestamp": "2015-04-28T11:21:56.098946+00:00Z",
+                "pg_last_xlog_receive_location": "0/70004D8",
+                "pg_last_xlog_replay_location": "0/70004D8",
+                "replication_time_lag": 400.435871,
+            },
+            "192.168.57.180": {
+                "connection": False,
+                "db_time": "2015-04-28T11:21:55.830432Z",
+                "fetch_time": now,
+                "pg_is_in_recovery": False,
+                "pg_last_xact_replay_timestamp": None,
+                "pg_last_xlog_receive_location": None,
+                "pg_last_xlog_replay_location": None,
+                "replication_time_lag": 0.0,
+            },
+            "192.168.63.4": {
+                "connection": True,
+                "db_time": now,
+                "fetch_time": now,
+                "pg_is_in_recovery": True,
+                "pg_last_xact_replay_timestamp": "2015-04-28T11:21:56.098946+00:00Z",
+                "pg_last_xlog_receive_location": "0/70004D8",
+                "pg_last_xlog_replay_location": "0/70004D8",
+                "replication_time_lag": 401.104655,
+            },
+        }
+        self.pglookout.current_master = "192.168.57.180"
+        # We select the node with the "highest" identifier so call_count should stay zero if we're not the
+        # highest standby currently.
+        self.pglookout.own_db = "192.168.54.183"
+        self.pglookout.check_cluster_state()
+        self.assertEqual(self.pglookout.execute_external_command.call_count, 0)
+        # If we're the highest we should see call_count increment
+        self.pglookout.own_db = "192.168.63.4"
         self.pglookout.check_cluster_state()
         self.assertEqual(self.pglookout.execute_external_command.call_count, 1)

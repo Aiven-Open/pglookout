@@ -389,8 +389,14 @@ class PgLookout(object):
             self.log.warning("No known replication positions, canceling failover consideration")
             return
 
-        #  We always pick the 0th one coming out of sort, so both standbys will pick the same node for promotion
-        furthest_along_instance = min(known_replication_positions[max(known_replication_positions)])
+        # If there are multiple nodes with the same replication positions pick the one with the "highest" name
+        # to make sure pglookouts running on all standbys make the same decision.  The rationale for picking
+        # the "highest" node is that there's no obvious way for pglookout to decide which of the nodes is
+        # "best" beyond looking at replication positions, but picking the highest id supports environments
+        # where nodes are assigned identifiers from an incrementing sequence identifiers and where we want to
+        # promote the latest and greatest node.  In static environments node identifiers can be priority
+        # numbers, with the highest number being the one that should be preferred.
+        furthest_along_instance = max(known_replication_positions[max(known_replication_positions)])
         self.log.warning("Node that is furthest along is: %r, all replication positions were: %r",
                          furthest_along_instance, known_replication_positions)
         total_observers = len(self.connected_observer_nodes) + len(self.disconnected_observer_nodes)
