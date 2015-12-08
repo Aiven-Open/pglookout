@@ -10,7 +10,7 @@ See the file `LICENSE` for details.
 
 from .common import (
     mask_connection_info, get_iso_timestamp, parse_iso_datetime,
-    set_syslog_handler, total_seconds)
+    set_syslog_handler)
 from concurrent.futures import as_completed, ThreadPoolExecutor
 from email.utils import parsedate
 from psycopg2.extras import RealDictCursor
@@ -188,7 +188,7 @@ class ClusterMonitor(Thread):
         # abs is for catching time travel (as in going from the future to the past
         if result["pg_last_xact_replay_timestamp"]:
             replication_time_lag = abs(result["db_time"] - result["pg_last_xact_replay_timestamp"])
-            result["replication_time_lag"] = total_seconds(replication_time_lag)
+            result["replication_time_lag"] = replication_time_lag.total_seconds()
             result["pg_last_xact_replay_timestamp"] = get_iso_timestamp(result["pg_last_xact_replay_timestamp"])
 
         if not result["pg_is_in_recovery"]:
