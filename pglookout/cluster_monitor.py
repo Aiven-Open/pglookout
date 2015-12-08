@@ -18,7 +18,7 @@ from threading import Thread
 import datetime
 import errno
 import logging
-import psycopg2
+import psycopg2  # pylint: disable=ungrouped-imports
 import requests
 import select
 import time

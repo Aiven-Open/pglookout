@@ -56,7 +56,7 @@ def test_main_loop(psycopg2_connect):
     trigger_check_queue = Queue()
     trigger_check_queue.put("test entry so we don't wait five seconds to get one")
 
-    class FakeCursor(MagicMock):
+    class FakeCursor(MagicMock):  # pylint: disable=too-many-ancestors
         def execute(self, query):  # pylint: disable=no-self-use,unused-argument
             return
 
@@ -64,7 +64,7 @@ def test_main_loop(psycopg2_connect):
             return {"pg_is_in_recovery": False, "pg_last_xact_replay_timestamp": datetime.utcnow(),
                     "db_time": datetime.utcnow()}
 
-    class FakeConn(Mock):
+    class FakeConn(Mock):  # pylint: disable=too-many-ancestors
         def cursor(self, cursor_factory):  # pylint: disable=unused-argument
             f = FakeCursor()
             f.connection = self  # pylint: disable=attribute-defined-outside-init
