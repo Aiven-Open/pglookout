@@ -11,6 +11,7 @@ See the file `LICENSE` for details.
 from .common import (
     mask_connection_info, get_iso_timestamp, parse_iso_datetime,
     set_syslog_handler, total_seconds)
+from concurrent.futures import as_completed, ThreadPoolExecutor
 from email.utils import parsedate
 from psycopg2.extras import RealDictCursor
 from threading import Thread
@@ -212,16 +213,22 @@ class ClusterMonitor(Thread):
         else:
             self.cluster_state[instance] = result
 
+    def main_monitoring_loop(self):
+        self.connect_to_cluster_nodes_and_cleanup_old_nodes()
+        thread_count = len(self.db_conns) + len(self.config.get("observers", {}))
+        futures = []
+        with ThreadPoolExecutor(max_workers=thread_count) as tex:
+            for instance, db_conn in self.db_conns.items():
+                futures.append(tex.submit(self.standby_status_query, instance, db_conn))
+            for instance, uri in self.config.get("observers", {}).items():
+                futures.append(tex.submit(self.fetch_observer_state, instance, uri))
+            for future in as_completed(futures):
+                if future.exception():
+                    self.log.error("Got error: %r when checking cluster state", future.exception())
+
     def run(self):
         while self.running:
-            try:
-                self.connect_to_cluster_nodes_and_cleanup_old_nodes()
-                for instance, db_conn in self.db_conns.items():
-                    self.standby_status_query(instance, db_conn)
-                for instance, uri in self.config.get("observers", {}).items():
-                    self.fetch_observer_state(instance, uri)
-            except:
-                self.log.exception("Problem in ClusterMonitor")
+            self.main_monitoring_loop()
             try:
                 self.trigger_check_queue.get(timeout=self.config.get("db_poll_interval", 5.0))
             except Empty:

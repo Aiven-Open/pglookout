@@ -18,7 +18,7 @@ Obsoletes:      python3-pglookout
 Requires:       python3-psycopg2, python3-requests, python3-setuptools, systemd-python3, systemd
 BuildRequires:  python3-pytest, python3-pylint
 %else
-Requires:       python-psycopg2, python-requests, python-setuptools, systemd-python, systemd
+Requires:       python-psycopg2, python-requests, python-futures, python-setuptools, systemd-python, systemd
 BuildRequires:  pytest, pylint
 %endif
 BuildRequires:  %{requires}
