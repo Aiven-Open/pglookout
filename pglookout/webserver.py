@@ -7,17 +7,9 @@ Copyright (c) 2014 F-Secure
 This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
-
+import json
 from logging import getLogger
 from threading import Thread
-
-# Prefer simplejson over json as on Python2.6 json does not play together
-# nicely with other libraries as it loads strings in unicode and for example
-# SysLogHandler does not like getting syslog facility as unicode string.
-try:
-    import simplejson as json  # pylint: disable=import-error
-except ImportError:
-    import json
 
 try:
     from SocketServer import ThreadingMixIn  # pylint: disable=import-error

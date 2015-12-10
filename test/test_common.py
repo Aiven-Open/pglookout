@@ -9,7 +9,6 @@ from pglookout.common import (
     create_connection_string, get_connection_info, mask_connection_info,
     convert_xlog_location_to_offset,
     parse_iso_datetime, get_iso_timestamp, ISO_EXT_RE,
-    total_seconds,
 )
 from pytest import raises
 import datetime
@@ -89,8 +88,3 @@ def test_get_iso_timestamp():
     ts = datetime.datetime.now()
     v = get_iso_timestamp(ts)
     assert parse_iso_datetime(v) == ts
-
-
-def test_total_seconds():
-    td = datetime.timedelta(days=57, seconds=81474, microseconds=91919)
-    assert total_seconds(td) == 5006274.091919

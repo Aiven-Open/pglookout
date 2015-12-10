@@ -13,11 +13,12 @@ from .cluster_monitor import ClusterMonitor
 from .common import (
     create_connection_string, get_connection_info, get_connection_info_from_config_line,
     convert_xlog_location_to_offset, parse_iso_datetime, get_iso_timestamp,
-    total_seconds, set_syslog_handler, LOG_FORMAT)
+    set_syslog_handler, LOG_FORMAT)
 from .webserver import WebServer
 from psycopg2.extensions import adapt
 import copy
 import datetime
+import json
 import logging
 import logging.handlers
 import os
@@ -26,14 +27,6 @@ import socket
 import subprocess
 import sys
 import time
-
-# Prefer simplejson over json as on Python2.6 json does not play together
-# nicely with other libraries as it loads strings in unicode and for example
-# SysLogHandler does not like getting syslog facility as unicode string.
-try:
-    import simplejson as json  # pylint: disable=import-error
-except ImportError:
-    import json
 
 try:
     from queue import Queue  # pylint: disable=import-error
@@ -137,12 +130,9 @@ class PgLookout(object):
                                                      self.config.get("syslog_facility", "local2"),
                                                      self.log)
         self.own_db = self.config.get("own_db")
-        # the levelNames hack is needed for Python2.6
+
         log_level_name = self.config.get("log_level", "DEBUG")
-        if sys.version_info[0] >= 3:
-            self.log_level = getattr(logging, log_level_name)
-        else:
-            self.log_level = logging._levelNames[log_level_name]  # pylint: disable=no-member,protected-access
+        self.log_level = getattr(logging, log_level_name)
         try:
             self.log.setLevel(self.log_level)
             if self.cluster_monitor:
@@ -194,7 +184,7 @@ class PgLookout(object):
             else:
                 self.log.debug("No knowledge on instance: %r state: %r of whether it's in recovery or not", instance, state)
 
-        for observer_name, state in observer_state.items():
+        for observer_name, state in observer_state.items():  # pylint: disable=too-many-nested-blocks
             connected = state.get("connection", False)
             if connected:
                 connected_observer_nodes[observer_name] = state.get("fetch_time")
@@ -375,7 +365,7 @@ class PgLookout(object):
             time_since_last_contact = datetime.datetime.utcnow() - parse_iso_datetime(db_time)
             if time_since_last_contact < datetime.timedelta(seconds=self.replication_lag_failover_timeout):
                 self.log.debug("We've had contact with master: %r at: %r within the last %.2fs, not failing over",
-                               disconnected_master_node, db_time, total_seconds(time_since_last_contact))
+                               disconnected_master_node, db_time, time_since_last_contact.total_seconds())
                 return True
         return False
 

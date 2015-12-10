@@ -12,7 +12,8 @@ disable=
     too-many-instance-attributes,
     too-many-locals,
     too-many-public-methods,
-    too-many-statements
+    too-many-statements,
+    wrong-import-order
 
 [REPORTS]
 output-format=text
