@@ -184,7 +184,7 @@ class PgLookout(object):
             else:
                 self.log.debug("No knowledge on instance: %r state: %r of whether it's in recovery or not", instance, state)
 
-        for observer_name, state in observer_state.items():  # pylint: disable=too-many-nested-blocks
+        for observer_name, state in observer_state.items():
             connected = state.get("connection", False)
             if connected:
                 connected_observer_nodes[observer_name] = state.get("fetch_time")

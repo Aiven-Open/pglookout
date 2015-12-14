@@ -11,8 +11,10 @@ disable=
     too-many-branches,
     too-many-instance-attributes,
     too-many-locals,
+    too-many-nested-blocks,
     too-many-public-methods,
     too-many-statements,
+    ungrouped-imports,
     wrong-import-order
 
 [REPORTS]
