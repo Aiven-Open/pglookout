@@ -9,6 +9,7 @@ See the file `LICENSE` for details.
 """
 
 from __future__ import print_function
+from . import statsd
 from .cluster_monitor import ClusterMonitor
 from .common import (
     create_connection_string, get_connection_info, get_connection_info_from_config_line,
@@ -45,6 +46,7 @@ logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 class PgLookout(object):
     def __init__(self, config_path):
         self.log = logging.getLogger("pglookout")
+        self.statsd = None
         self.running = True
         self.replication_lag_over_warning_limit = False
 
@@ -111,6 +113,11 @@ class PgLookout(object):
         except:
             self.log.exception("Invalid JSON config, exiting")
             sys.exit(1)
+
+        # statsd settings may have changed
+        stats = self.config.get("statsd", {})
+        self.stats = statsd.StatsClient(host=stats.get("host"), port=stats.get("port"),
+                                        tags=stats.get("tags"))
 
         if previous_remote_conns != self.config.get("remote_conns"):
             self.cluster_nodes_change_time = time.time()
@@ -244,6 +251,11 @@ class PgLookout(object):
 
         return master_instance, master_node, standby_nodes
 
+    def emit_stats(self, state):
+        replication_time_lag = state.get("replication_time_lag")
+        if replication_time_lag is not None:
+            self.stats.gauge("pg.replication_lag", replication_time_lag)
+
     def check_cluster_state(self):
         master_node = None
         cluster_state = copy.deepcopy(self.cluster_state)
@@ -261,6 +273,7 @@ class PgLookout(object):
                 self.start_following_new_master(master_instance)
 
         own_state = self.cluster_state.get(self.own_db)
+        self.emit_stats(own_state)
 
         # If we're an observer ourselves, we'll grab the IP address from HTTP server address
         observer_info = ",".join(observer_state) or "no"
