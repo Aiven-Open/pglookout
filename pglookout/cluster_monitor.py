@@ -198,7 +198,7 @@ class ClusterMonitor(Thread):
                 "pg_last_xlog_receive_location": None,
                 "pg_last_xact_replay_timestamp": None,
                 "pg_last_xlog_replay_location": None,
-                "replication_time_lag": 0.0,
+                "replication_time_lag": None,  # differentiate from actual lag=0.0
             })
         result.update({"db_time": get_iso_timestamp(result["db_time"]), "connection": True})
         return result
