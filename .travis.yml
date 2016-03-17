@@ -4,12 +4,13 @@ python:
   - "2.7"
   - "3.3"
   - "3.4"
+  - "3.5"
 
 install:
   - "pip install pylint pytest mock pep8 psycopg2 requests futures"
 
 script:
-  - "(python -V 2>&1 | grep -qF 'Python 2.6') || make pylint"
+  - "make pylint"
   - "make pep8"
   - "make unittest"
 
