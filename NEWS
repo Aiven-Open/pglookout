@@ -1,7 +1,27 @@
+pglookout 1.3.0 (2016-XX-XX)
+============================
+
+* Support for Telegraf statsd
+* Check cluster state concurrently from all endpoints
+* New `primary_conninfo_template` configuration option to generate a
+  primary_conninfo for recovery.conf when we start following a (new) master.
+  Previously pglookout tried to read an existing primary_conninfo and
+  replace the host part of it with the new master's address, but this may
+  not always work, for example in case there's no primary_conninfo at all.
+* Automatically promote one of the standby nodes if pglookout has never seen
+  a master for N seconds
+* Failover now selects the node with highest identifier if multiple nodes
+  have the same replication position
+* `remote_conns` object's keys no longer have functional meaning.  Remote
+  addresses are only read from the values of the object.
+* Drop support for Python 2.6
+* Various minor bug fixes, refactoring and improved test cases
+
 pglookout 1.2.0 (2015-06-15)
 ============================
 
-* Support autofollow, where a standby starts automatically following another standby that has been promoted to be the new cluster master
+* Support autofollow, where a standby starts automatically following another
+  standby that has been promoted to be the new cluster master
 * Packaging improvements
 * Multiple bugfixes
 * unittest fixes to cope better with parallel testruns
@@ -10,15 +30,17 @@ pglookout 1.2.0 (2015-06-15)
 pglookout 1.1.0 (2015-02-14)
 ============================
 
-* Add support for observers to participate simultaneously in multiple replication clusters, allowing observers to be shared across replication clusters
+* Add support for observers to participate simultaneously in multiple
+  replication clusters, allowing observers to be shared across replication
+  clusters
 * Improved setup and installation documentation
 * Add Travis CI tests for Python (2.6, 2.7, 3.3 and 3.4)
 * Add RPM packaging
 * Add systemd support
 * Compatibility fixes for Python3/PyPy
-* The pglookout JSON state file has been renamed from json_state_file to pglookout_state.json
-* general bug fixes
-
+* The pglookout JSON state file has been renamed from json_state_file to
+  pglookout_state.json
+* General bug fixes
 
 pglookout 1.0.0 (2014-10-14)
 ============================
