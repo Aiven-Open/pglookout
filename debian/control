@@ -2,11 +2,14 @@ Source: pglookout
 Maintainer: Hannu Valtonen <hannu.valtonen@ohmu.fi>
 Section: python
 Priority: optional
-Build-Depends: python-setuptools (>= 0.6b3), python-all (>= 2.6.6-3), debhelper (>= 7.4.3), dh-systemd (>= 1.2.2)
-Standards-Version: 3.9.1
+Build-Depends: debhelper (>= 7.4.3), dh-systemd (>= 1.2.2), dh-python,
+ python-setuptools (>= 0.6b3), python-all (>= 2.7)
+X-Python-Version: >= 2.7
+Standards-Version: 3.9.4
+Homepage: http://github.com/ohmu/pglookout
 
 Package: pglookout
 Architecture: all
-Depends: ${misc:Depends}, ${python:Depends}, python-psycopg2 (>= 2.4.0-1), python-requests (>= 1.2.0-1), python-concurrent.futures (>= 2.2.0-1)
-Suggests: python-simplejson (>= 2.1.1-1)
+Depends: ${misc:Depends}, ${python:Depends},
+ python-psycopg2 (>= 2.4.0-1), python-requests (>= 1.2.0-1), python-concurrent.futures (>= 2.2.0-1)
 Description: pglookout provides a monitoring/failover service for PostgreSQL streaming replication.

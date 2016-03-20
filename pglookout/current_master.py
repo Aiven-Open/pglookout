@@ -9,14 +9,10 @@ See the file `LICENSE` for details.
 """
 
 from __future__ import print_function
+import json
 import os
 import sys
 import time
-
-try:
-    import simplejson as json  # pylint: disable=import-error
-except ImportError:
-    import json
 
 
 def main(args=None):

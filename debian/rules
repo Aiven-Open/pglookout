@@ -1,5 +1,6 @@
 #!/usr/bin/make -f
 
-%:
-	dh $@ --with python2 --with systemd --buildsystem=python_distutils
+export PYBUILD_NAME=pglookout
 
+%:
+	dh $@ --with python2 --with systemd --buildsystem=pybuild
