@@ -135,7 +135,7 @@ class PgLookout(object):
         if self.config.get("syslog") and not self.syslog_handler:
             self.syslog_handler = set_syslog_handler(self.config.get("syslog_address", "/dev/log"),
                                                      self.config.get("syslog_facility", "local2"),
-                                                     self.log)
+                                                     logging.getLogger())
         self.own_db = self.config.get("own_db")
 
         log_level_name = self.config.get("log_level", "DEBUG")
