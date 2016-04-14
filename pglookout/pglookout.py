@@ -14,7 +14,7 @@ from .cluster_monitor import ClusterMonitor
 from .common import (
     create_connection_string, get_connection_info, get_connection_info_from_config_line,
     convert_xlog_location_to_offset, parse_iso_datetime, get_iso_timestamp,
-    set_syslog_handler, LOG_FORMAT)
+    set_syslog_handler, LOG_FORMAT, LOG_FORMAT_SYSLOG)
 from .webserver import WebServer
 from psycopg2.extensions import adapt
 import argparse
@@ -39,9 +39,6 @@ try:
     from systemd import daemon  # pylint: disable=import-error
 except:
     daemon = None
-
-
-logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
 
 class PgLookout(object):
@@ -571,6 +568,17 @@ def main(args=None):
     if not os.path.exists(arg.config):
         print("pglookout: {!r} doesn't exist".format(arg.config))
         return 1
+
+    # Are we running under systemd?
+    if os.getenv("NOTIFY_SOCKET"):
+        logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT_SYSLOG)
+        if not daemon:
+            print(
+                "WARNING: Running under systemd but python-systemd not available, "
+                "systemd won't see our notifications"
+            )
+    else:
+        logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
     pglookout = PgLookout(arg.config)
     pglookout.run()
