@@ -9,7 +9,7 @@ See the file `LICENSE` for details.
 """
 
 from __future__ import print_function
-from . import statsd
+from . import statsd, version
 from .cluster_monitor import ClusterMonitor
 from .common import (
     create_connection_string, get_connection_info, get_connection_info_from_config_line,
@@ -17,6 +17,7 @@ from .common import (
     set_syslog_handler, LOG_FORMAT)
 from .webserver import WebServer
 from psycopg2.extensions import adapt
+import argparse
 import copy
 import datetime
 import json
@@ -556,14 +557,24 @@ class PgLookout(object):
 
 
 def main(args=None):
-    if not args:
+    if args is None:
         args = sys.argv[1:]
-    if len(args) == 1 and os.path.exists(args[0]):
-        pglookout = PgLookout(args[0])
-        pglookout.run()
-    else:
-        print("Usage, pglookout <config filename>")
+
+    parser = argparse.ArgumentParser(
+        prog="pglookout",
+        description="postgresql replication monitoring and failover daemon")
+    parser.add_argument("--version", action="version", help="show program version",
+                        version=version.__version__)
+    parser.add_argument("config", help="configuration file")
+    arg = parser.parse_args(args)
+
+    if not os.path.exists(arg.config):
+        print("pglookout: {!r} doesn't exist".format(arg.config))
         return 1
+
+    pglookout = PgLookout(arg.config)
+    pglookout.run()
+
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))

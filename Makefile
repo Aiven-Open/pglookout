@@ -1,18 +1,22 @@
 short_ver = 1.2.0
 long_ver = $(shell git describe --long 2>/dev/null || echo $(short_ver)-0-unknown-g`git describe --always`)
+generated = pglookout/version.py
 
 PYTHON ?= python
 PYLINT_DIRS = pglookout/ test/
 
-all:
+all: $(generated)
 	: 'try "make rpm" or "make deb" or "make test"'
+
+pglookout/version.py: version.py
+	$(PYTHON) $^ $@
 
 test: pylint unittest
 
-unittest:
+unittest: $(generated)
 	$(PYTHON) -m pytest -vv test/
 
-pylint:
+pylint: $(generated)
 	$(PYTHON) -m pylint.lint --rcfile .pylintrc $(PYLINT_DIRS)
 
 coverage:
@@ -20,20 +24,22 @@ coverage:
 
 clean:
 	$(RM) -r *.egg-info/ build/ dist/
-	$(RM) ../pglookout_* test-*.xml
+	$(RM) ../pglookout_* test-*.xml $(generated)
 
-deb:
+deb: $(generated)
 	cp debian/changelog.in debian/changelog
 	dch -v $(long_ver) "Automatically built package"
 	dpkg-buildpackage -A -uc -us
 
-rpm:
-	git archive --output=pglookout-rpm-src.tar.gz --prefix=pglookout/ HEAD
+rpm: $(generated)
+	git archive --output=pglookout-rpm-src.tar --prefix=pglookout/ HEAD
+	# add generated files to the tar, they're not in git repository
+	tar -r -f pglookout-rpm-src.tar --transform=s,pglookout/,pglookout/pglookout/, $(generated)
 	rpmbuild -bb pglookout.spec \
 		--define '_sourcedir $(shell pwd)' \
 		--define 'major_version $(short_ver)' \
 		--define 'minor_version $(subst -,.,$(subst $(short_ver)-,,$(long_ver)))'
-	$(RM) pglookout-rpm-src.tar.gz
+	$(RM) pglookout-rpm-src.tar
 
 build-dep-fed:
 	sudo yum -y install \

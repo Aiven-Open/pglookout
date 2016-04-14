@@ -5,3 +5,4 @@ __pycache__/
 build/
 pglookout.egg-info/
 .coverage
+/pglookout/version.py
