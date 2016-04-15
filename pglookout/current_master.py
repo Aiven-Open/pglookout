@@ -9,6 +9,8 @@ See the file `LICENSE` for details.
 """
 
 from __future__ import print_function
+from . import version
+import argparse
 import json
 import os
 import sys
@@ -18,13 +20,21 @@ import time
 def main(args=None):
     if args is None:
         args = sys.argv[1:]
-    if len(args) != 1:
-        print("Usage, pglookout_current_master <path_to_pglookout.json>")
-        return -1
-    if not os.path.exists(args[0]):
-        return -1
+
+    parser = argparse.ArgumentParser(
+        prog="pglookout_current_master",
+        description="postgresql replication monitoring and failover daemon")
+    parser.add_argument("--version", action="version", help="show program version",
+                        version=version.__version__)
+    parser.add_argument("state", help="pglookout state file")
+    arg = parser.parse_args(args)
+
+    if not os.path.exists(arg.state):
+        print("pglookout_current_master: {!r} doesn't exist".format(arg.state))
+        return 1
+
     try:
-        with open(args[0], "r") as fp:
+        with open(arg.state, "r") as fp:
             config = json.load(fp)
         state_file_path = config.get("json_state_file_path", "/tmp/pglookout_state.json")  # pylint: disable=no-member
         if time.time() - os.stat(state_file_path).st_mtime > 60.0:
@@ -36,6 +46,7 @@ def main(args=None):
         print(current_master)
     except:
         return -1
+
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))

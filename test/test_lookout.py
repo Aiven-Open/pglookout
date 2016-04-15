@@ -424,7 +424,11 @@ class TestPgLookout(TestCase):
 
         pg_data_dir = os.path.join(self.temp_dir + os.sep + "test_pgdata")
         os.makedirs(pg_data_dir)
-        primary_conninfo = "user=replication password=vjsh8l7sv4a902y1tsdz host=old_master port=5432 sslmode=prefer sslcompression=1 krbsrvname=postgres"
+        primary_conninfo = (
+            "user=replication password=vjsh8l7sv4a902y1tsdz "
+            "host=old_master port=5432 "
+            "sslmode=prefer sslcompression=1 krbsrvname=postgres"
+        )
         old_recovery_conf = "standby_mode = 'on'\nprimary_conninfo = '{0}'\n".format(primary_conninfo)
         with open(os.path.join(pg_data_dir, "recovery.conf"), "w") as fp:
             fp.write(old_recovery_conf)

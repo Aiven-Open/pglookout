@@ -10,7 +10,7 @@ Release:        %{minor_version}%{?dist}
 Url:            http://github.com/ohmu/pglookout
 Summary:        PostgreSQL replication monitoring and failover daemon
 License:        ASL 2.0
-Source0:        pglookout-rpm-src.tar.gz
+Source0:        pglookout-rpm-src.tar
 Requires(pre):  shadow-utils
 Requires:       postgresql-server, systemd
 %if %{use_python3}
