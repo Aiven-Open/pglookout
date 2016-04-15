@@ -11,10 +11,13 @@ all: $(generated)
 pglookout/version.py: version.py
 	$(PYTHON) $^ $@
 
-test: pylint unittest
+test: flake8 pylint unittest
 
 unittest: $(generated)
 	$(PYTHON) -m pytest -vv test/
+
+flake8: $(generated)
+	$(PYTHON) -m flake8 --max-line-len=125 $(PYLINT_DIRS)
 
 pylint: $(generated)
 	$(PYTHON) -m pylint.lint --rcfile .pylintrc $(PYLINT_DIRS)
@@ -52,7 +55,3 @@ build-dep-deb:
 	sudo apt-get install \
 		build-essential devscripts dh-systemd \
 		python-all python-setuptools python-psycopg2 python-requests
-
-pep8:
-	$(PYTHON) -m pep8 --ignore=E501,E123 $(PYLINT_DIRS)
-

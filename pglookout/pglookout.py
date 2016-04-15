@@ -199,7 +199,8 @@ class PgLookout(object):
                 if instance not in cluster_state:
                     # A single observer can observe multiple different replication clusters.
                     # Ignore data on nodes that don't belong in our own cluster
-                    self.log.debug("Ignoring instance: %r since it does not belong into our own replication cluster", instance)
+                    self.log.debug("Ignoring instance: %r since it does not belong into our own replication cluster",
+                                   instance)
                     continue
                 if isinstance(db_state, dict):  # other keys are "connection" and "fetch_time"
                     own_fetch_time = parse_iso_datetime(cluster_state[instance]["fetch_time"])
@@ -295,15 +296,18 @@ class PgLookout(object):
     def consider_failover(self, own_state, master_node, standby_nodes):
         if not master_node:
             # no master node at all in the cluster?
-            self.log.warning("No master node in cluster, %r standby nodes exist, %.2f seconds since last cluster config update, failover timeout set to %r seconds",
-                             len(standby_nodes), time.time() - self.cluster_nodes_change_time, self.replication_lag_failover_timeout)
+            self.log.warning("No master node in cluster, %r standby nodes exist, "
+                             "%.2f seconds since last cluster config update, failover timeout set to %r seconds",
+                             len(standby_nodes), time.time() - self.cluster_nodes_change_time,
+                             self.replication_lag_failover_timeout)
             if self.current_master:
                 self.trigger_check_queue.put("Master is missing, ask for immediate state check")
                 if (time.time() - self.cluster_nodes_change_time) >= self.missing_master_from_config_timeout:
                     # we've seen a master at some point in time, but now it's
                     # missing, perform an immediate failover to promote one of
                     # the standbys
-                    self.log.warning("Performing failover decision because existing master node disappeared from configuration")
+                    self.log.warning("Performing failover decision because existing master node "
+                                     "disappeared from configuration")
                     self.do_failover_decision(own_state, standby_nodes)
                     return
             elif (time.time() - self.cluster_nodes_change_time) >= self.replication_lag_failover_timeout:
@@ -368,7 +372,7 @@ class PgLookout(object):
                 known_replication_positions.setdefault(xlog_pos, set()).add(instance)
         return known_replication_positions
 
-    def _have_we_been_in_contact_with_the_master_within_the_failover_timeout(self):
+    def _been_in_contact_with_master_within_failover_timeout(self):
         # no need to do anything here if there are no disconnected masters
         if len(self.disconnected_master_nodes) > 0:
             disconnected_master_node = list(self.disconnected_master_nodes.values())[0]
@@ -381,7 +385,7 @@ class PgLookout(object):
         return False
 
     def do_failover_decision(self, own_state, standby_nodes):
-        if len(self.connected_master_nodes) > 0 or self._have_we_been_in_contact_with_the_master_within_the_failover_timeout():
+        if len(self.connected_master_nodes) > 0 or self._been_in_contact_with_master_within_failover_timeout():
             self.log.warning("We still have some connected masters: %r, not failing over", self.connected_master_nodes)
             return
 
@@ -476,7 +480,9 @@ class PgLookout(object):
         if not has_recovery_target_timeline:
             new_conf.append("recovery_target_timeline = 'latest'")
         # prepend our tag
-        new_conf.insert(0, "# pglookout updated primary_conninfo for instance {0} at {1}".format(new_master_instance, get_iso_timestamp()))
+        new_conf.insert(0,
+                        "# pglookout updated primary_conninfo for instance {0} at {1}"
+                        .format(new_master_instance, get_iso_timestamp()))
         # Replace old recovery.conf with a fresh copy
         with open(path_to_recovery_conf + "_temp", "w") as fp:
             fp.write("\n".join(new_conf) + "\n")
@@ -491,7 +497,8 @@ class PgLookout(object):
         if not updated_config:
             self.log.info("Already following master %r, no need to start following it again", new_master_instance)
             return
-        start_command, stop_command = self.config.get("pg_start_command", "").split(), self.config.get("pg_stop_command", "").split()
+        start_command = self.config.get("pg_start_command", "").split()
+        stop_command = self.config.get("pg_stop_command", "").split()
         self.log.info("Starting to follow new master %r, modified recovery.conf and restarting PostgreSQL"
                       "; pg_stop_command %r; pg_start_command %r",
                       new_master_instance, start_command, stop_command)
