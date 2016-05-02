@@ -7,7 +7,7 @@
 Name:           pglookout
 Version:        %{major_version}
 Release:        %{minor_version}%{?dist}
-Url:            http://github.com/ohmu/pglookout
+Url:            https://github.com/ohmu/pglookout
 Summary:        PostgreSQL replication monitoring and failover daemon
 License:        ASL 2.0
 Source0:        pglookout-rpm-src.tar
@@ -26,6 +26,9 @@ BuildArch:      noarch
 
 %description
 pglookout is a PostgreSQL replication monitoring and failover daemon.
+pglookout monitors PG database nodes and their replication status and acts
+according to that status, for example calling a predefined failover command
+to promote a new master in case the previous one goes missing.
 
 
 %prep

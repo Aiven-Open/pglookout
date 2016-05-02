@@ -39,6 +39,7 @@ rpm: $(generated)
 	# add generated files to the tar, they're not in git repository
 	tar -r -f pglookout-rpm-src.tar --transform=s,pglookout/,pglookout/pglookout/, $(generated)
 	rpmbuild -bb pglookout.spec \
+		--define '_topdir $(PWD)/rpm' \
 		--define '_sourcedir $(shell pwd)' \
 		--define 'major_version $(short_ver)' \
 		--define 'minor_version $(subst -,.,$(subst $(short_ver)-,,$(long_ver)))'

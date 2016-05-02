@@ -22,6 +22,7 @@ between multiple replication clusters. In general it is recommended
 that you run with at least one external observer giving an additional
 viewpoint on the health of the cluster.
 
+
 Requirements
 ============
 
@@ -35,6 +36,7 @@ newer.  pglookout depends on the Requests_ and Psycopg2_ Python modules.
 
 .. _`Requests`: http://www.python-requests.org/en/latest/
 .. _`Psycopg2`: http://initd.org/psycopg/
+
 
 Building
 ========
@@ -52,13 +54,14 @@ Fedora::
 
   make rpm
 
-This will produce a .rpm package usually into ~/rpmbuild/RPMS/noarch/ .
+This will produce a ``.rpm`` package into ``rpm/RPMS/noarch/``.
 
 Python/Other::
 
   python setup.py bdist_egg
 
 This will produce an egg file into a dist directory within the same folder.
+
 
 Installation
 ============
@@ -71,9 +74,10 @@ Debian::
 
 Fedora::
 
-  rpm -Uvh ~/rpmbuild/RPMS/noarch/pglookout*
+  dnf install rpm/RPMS/noarch/*
 
-On Fedora it is recommended to simply run pglookout under systemd::
+On Linux systems it is recommended to simply run ``pglookout`` under
+``systemd``::
 
   systemctl enable pglookout.service
 
@@ -83,11 +87,12 @@ and eventually after the setup section, you can just run::
 
 Python/Other::
 
-  easy_install dist/pglookout-1.1.0-py2.7.egg
+  easy_install dist/pglookout-1.3.0-py2.7.egg
 
-On Debian/Other systems it is recommended that you run pglookout within
-a supervisord (http://supervisord.org) Process control system.
-(see examples directory for an example supervisord.conf)
+On systems without ``systemd`` it is recommended that you run ``pglookout``
+under Supervisor_ or other similar process control system.
+
+.. _`Supervisor`: http://supervisord.org
 
 
 Setup
@@ -332,8 +337,8 @@ Determines syslog log facility. (requires syslog to be true as well)
 
 ``statsd`` (default: disabled)
 
-Enables metrics sending to a statsd daemon that supports the influxdb-statsd/telegraf
-syntax with tags.
+Enables metrics sending to a statsd daemon that supports the StatsD /
+Telegraf syntax with tags.
 
 The value is a JSON object::
 
@@ -347,7 +352,10 @@ The value is a JSON object::
 
 The ``tags`` setting can be used to enter optional tag values for the metrics.
 
-Metrics sendindg follows the Telegraf spec: https://github.com/influxdata/telegraf/tree/master/plugins/inputs/statsd
+Metrics sending follows the `Telegraf spec`_.
+
+.. _`Telegraf spec`: https://github.com/influxdata/telegraf/tree/master/plugins/inputs/statsd
+
 
 License
 =======
@@ -361,7 +369,12 @@ Credits
 =======
 
 pglookout was created by Hannu Valtonen <hannu.valtonen@ohmu.fi> for
-F-Secure and is now maintained by Ohmu Ltd's hackers <opensource@ohmu.fi>.
+F-Secure_ and is now maintained by `Ohmu Ltd`_ hackers and `Aiven Cloud
+Database`_ developers <pglookout@ohmu.fi>.
+
+.. _`F-Secure`: https://www.f-secure.com/
+.. _`Ohmu Ltd`: https://ohmu.fi/
+.. _`Aiven Cloud Database`: https://aiven.io/
 
 Recent contributors are listed on the GitHub project page,
 https://github.com/ohmu/pglookout/graphs/contributors
@@ -373,4 +386,4 @@ Contact
 Bug reports and patches are very welcome, please post them as GitHub issues
 and pull requests at https://github.com/ohmu/pglookout .  Any possible
 vulnerabilities or other serious issues should be reported directly to the
-maintainers <opensource@ohmu.fi>.
+maintainers <pglookout@ohmu.fi>.
