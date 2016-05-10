@@ -251,6 +251,11 @@ class PgLookout(object):
         return master_instance, master_node, standby_nodes
 
     def emit_stats(self, state):
+        if not state.get("pg_last_xlog_receive_location"):
+            # node has not received anything from the master yet, do not emit
+            # WAL replay from files after restore as "replication lag"
+            return
+
         replication_time_lag = state.get("replication_time_lag")
         if replication_time_lag is not None:
             self.stats.gauge("pg.replication_lag", replication_time_lag)
@@ -320,6 +325,11 @@ class PgLookout(object):
         self.check_replication_lag(own_state, standby_nodes)
 
     def check_replication_lag(self, own_state, standby_nodes):
+        if not own_state.get("pg_last_xlog_receive_location"):
+            # node has not received anything from the master yet, do not raise
+            # "replication lag" alerts during WAL replay from files after restore
+            return
+
         replication_lag = own_state.get('replication_time_lag')
         if not replication_lag:
             self.log.warning("No replication lag set in own node state: %r", own_state)
