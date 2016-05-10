@@ -36,6 +36,7 @@ def _create_db_node_state(pg_last_xlog_receive_location=None, pg_is_in_recovery=
         "pg_last_xlog_receive_location": pg_last_xlog_receive_location,
         "pg_last_xlog_replay_location": None,
         "replication_time_lag": replication_time_lag,
+        "min_replication_time_lag": 0,  # simulate that we've been in sync once
     }
 
 
@@ -412,8 +413,8 @@ class TestPgLookout(TestCase):
         self.pglookout.own_db = "own"
         self._add_db_to_cluster_state("other", pg_last_xlog_receive_location="2/aaaaaaaa",
                                       pg_is_in_recovery=True, connection=False, replication_time_lag=130.0)
-
         self.pglookout.check_cluster_state()
+
         self.assertTrue(self.pglookout.replication_lag_over_warning_limit)  # we keep the warning on
         self.assertEqual(self.pglookout.execute_external_command.call_count, 0)
         self.assertEqual(self.pglookout.current_master, "old_master")
@@ -566,6 +567,7 @@ class TestPgLookout(TestCase):
                 "pg_last_xlog_receive_location": "0/70004D8",
                 "pg_last_xlog_replay_location": "0/70004D8",
                 "replication_time_lag": 400.435871,
+                "min_replication_time_lag": 0,  # simulate that we've been in sync once
             },
             "192.168.57.180": {
                 "connection": False,
@@ -576,6 +578,7 @@ class TestPgLookout(TestCase):
                 "pg_last_xlog_receive_location": None,
                 "pg_last_xlog_replay_location": None,
                 "replication_time_lag": 0.0,
+                "min_replication_time_lag": 0,  # simulate that we've been in sync once
             },
             "192.168.63.4": {
                 "connection": True,
@@ -586,6 +589,7 @@ class TestPgLookout(TestCase):
                 "pg_last_xlog_receive_location": "0/70004D8",
                 "pg_last_xlog_replay_location": "0/70004D8",
                 "replication_time_lag": 401.104655,
+                "min_replication_time_lag": 0,  # simulate that we've been in sync once
             },
         }
         self.pglookout.current_master = "192.168.57.180"

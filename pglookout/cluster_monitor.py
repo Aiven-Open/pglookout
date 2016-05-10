@@ -213,6 +213,19 @@ class ClusterMonitor(Thread):
         else:
             self.cluster_state[instance] = result
 
+        # record the first time we saw replication happen from the master
+        if result.get("pg_last_xlog_receive_location"):
+            result.setdefault("replication_start_time", time.time())
+
+        # maintain lowest seen lag in seconds in the state
+        min_lag = self.cluster_state[instance].get("min_replication_time_lag")
+        now_lag = result.get("replication_time_lag")
+        if now_lag is not None:
+            if min_lag is None:
+                self.cluster_state[instance]["min_replication_time_lag"] = now_lag
+            else:
+                self.cluster_state[instance]["min_replication_time_lag"] = min(min_lag, now_lag)
+
     def main_monitoring_loop(self):
         self.connect_to_cluster_nodes_and_cleanup_old_nodes()
         thread_count = len(self.db_conns) + len(self.config.get("observers", {}))
