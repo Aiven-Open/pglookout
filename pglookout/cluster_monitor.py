@@ -8,9 +8,8 @@ This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
 
-from .common import (
-    mask_connection_info, get_iso_timestamp, parse_iso_datetime,
-    set_syslog_handler)
+from .common import get_iso_timestamp, parse_iso_datetime, set_syslog_handler
+from .pgutil import mask_connection_info
 from concurrent.futures import as_completed, ThreadPoolExecutor
 from email.utils import parsedate
 from psycopg2.extras import RealDictCursor

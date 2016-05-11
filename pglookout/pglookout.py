@@ -12,9 +12,10 @@ from __future__ import print_function
 from . import statsd, version
 from .cluster_monitor import ClusterMonitor
 from .common import (
-    create_connection_string, get_connection_info, get_connection_info_from_config_line,
     convert_xlog_location_to_offset, parse_iso_datetime, get_iso_timestamp,
     set_syslog_handler, LOG_FORMAT, LOG_FORMAT_SYSLOG)
+from .pgutil import (
+    create_connection_string, get_connection_info, get_connection_info_from_config_line)
 from .webserver import WebServer
 from psycopg2.extensions import adapt
 import argparse
