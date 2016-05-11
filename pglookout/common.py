@@ -5,11 +5,7 @@ Copyright (c) 2015 Ohmu Ltd
 See LICENSE for details
 """
 import datetime
-import logging
 import re
-
-LOG_FORMAT = "%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s"
-LOG_FORMAT_SYSLOG = '%(name)s %(levelname)s: %(message)s'
 
 
 def convert_xlog_location_to_offset(xlog_location):
@@ -40,11 +36,3 @@ def get_iso_timestamp(fetch_time=None):
     elif fetch_time.tzinfo:
         fetch_time = fetch_time.replace(tzinfo=None) - datetime.timedelta(seconds=fetch_time.utcoffset().seconds)
     return fetch_time.isoformat() + "Z"
-
-
-def set_syslog_handler(syslog_address, syslog_facility, logger):
-    syslog_handler = logging.handlers.SysLogHandler(address=syslog_address, facility=syslog_facility)
-    logger.addHandler(syslog_handler)
-    formatter = logging.Formatter(LOG_FORMAT_SYSLOG)
-    syslog_handler.setFormatter(formatter)
-    return syslog_handler
