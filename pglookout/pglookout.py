@@ -151,6 +151,7 @@ class PgLookout(object):
         self.over_warning_limit_command = self.config.get("over_warning_limit_command")
         self.replication_lag_warning_boundary = self.config.get("warning_replication_time_lag", 30.0)
         self.replication_lag_failover_timeout = self.config.get("max_failover_replication_time_lag", 120.0)
+        self.replication_catchup_timeout = self.config.get("replication_catchup_timeout", 300.0)
         self.missing_master_from_config_timeout = self.config.get("missing_master_from_config_timeout", 15.0)
         self.log.debug("Loaded config: %r from: %r", self.config, self.config_path)
         self.trigger_check_queue.put("new config came, recheck")
@@ -250,7 +251,34 @@ class PgLookout(object):
 
         return master_instance, master_node, standby_nodes
 
+    def is_restoring_or_catching_up_normally(self, state):
+        """
+        Return True if node is still in the replication catchup phase and
+        replication lag alerts/metrics should not yet be generated.
+        """
+        replication_start_time = state.get("replication_start_time")
+        if replication_start_time:
+            replication_total_time = time.time() - replication_start_time
+            if replication_total_time > self.replication_catchup_timeout:
+                # we've been replicating for too long and should have caught up with the master already
+                return False
+
+        min_lag = state.get("min_replication_time_lag", self.replication_lag_warning_boundary)
+        if not state.get("pg_last_xlog_receive_location"):
+            # node has not received anything from the master yet
+            return True
+        elif min_lag >= self.replication_lag_warning_boundary:
+            # node is catching up the master and has not gotten close enough yet
+            return True
+
+        # node has caught up with the master so we should be in sync
+        return False
+
     def emit_stats(self, state):
+        if self.is_restoring_or_catching_up_normally(state):
+            # do not emit misleading lag stats during catchup at restore
+            return
+
         replication_time_lag = state.get("replication_time_lag")
         if replication_time_lag is not None:
             self.stats.gauge("pg.replication_lag", replication_time_lag)
@@ -320,6 +348,10 @@ class PgLookout(object):
         self.check_replication_lag(own_state, standby_nodes)
 
     def check_replication_lag(self, own_state, standby_nodes):
+        if self.is_restoring_or_catching_up_normally(own_state):
+            # do not raise alerts during catchup at restore
+            return
+
         replication_lag = own_state.get('replication_time_lag')
         if not replication_lag:
             self.log.warning("No replication lag set in own node state: %r", own_state)
