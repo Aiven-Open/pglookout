@@ -3,6 +3,9 @@ pglookout 1.3.0 (2016-XX-XX)
 
 * Support for Telegraf statsd
 * Check cluster state concurrently from all endpoints
+* Don't collect replication log metrics or issue warnings about it until we
+  have actually seen a master.  Previously pglookout could warn about
+  replication lag while PostgreSQL was performing archive recovery.
 * New `primary_conninfo_template` configuration option to generate a
   primary_conninfo for recovery.conf when we start following a (new) master.
   Previously pglookout tried to read an existing primary_conninfo and
