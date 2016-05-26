@@ -44,7 +44,7 @@ def main(args=None):
             state_dict = json.load(fp)
         current_master = state_dict['current_master']
         print(current_master)
-    except:
+    except:  # pylint: disable=bare-except
         return -1
 
 

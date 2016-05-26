@@ -37,14 +37,14 @@ except ImportError:
 
 try:
     from systemd import daemon  # pylint: disable=import-error
-except:
+except ImportError:
     daemon = None
 
 
 class PgLookout(object):
     def __init__(self, config_path):
         self.log = logging.getLogger("pglookout")
-        self.statsd = None
+        self.stats = None
         self.running = True
         self.replication_lag_over_warning_limit = False
 
@@ -81,9 +81,13 @@ class PgLookout(object):
                               "current_master": self.current_master,
                               "replication_lag_over_warning": self.replication_lag_over_warning_limit}
 
-        self.cluster_monitor = ClusterMonitor(self.config, self.cluster_state,
-                                              self.observer_state, self.create_alert_file,
-                                              trigger_check_queue=self.trigger_check_queue)
+        self.cluster_monitor = ClusterMonitor(
+            config=self.config,
+            cluster_state=self.cluster_state,
+            observer_state=self.observer_state,
+            create_alert_file=self.create_alert_file,
+            trigger_check_queue=self.trigger_check_queue,
+            stats=self.stats)
         # cluster_monitor doesn't exist at the time of reading the config initially
         self.cluster_monitor.log.setLevel(self.log_level)
         self.webserver = WebServer(self.config, self.cluster_state)
@@ -108,8 +112,9 @@ class PgLookout(object):
         try:
             with open(self.config_path) as fp:
                 self.config = json.load(fp)
-        except:
+        except Exception as ex:  # pylint: disable=broad-except
             self.log.exception("Invalid JSON config, exiting")
+            self.stats.unexpected_exception(ex, where="load_config")
             sys.exit(1)
 
         # statsd settings may have changed
@@ -169,9 +174,10 @@ class PgLookout(object):
                 fp.write(json_to_dump)
             os.rename(state_file_path + ".tmp", state_file_path)
             self.log.debug("Wrote JSON state file to disk, took %.4fs", time.time() - start_time)
-        except:
+        except Exception as ex:  # pylint: disable=broad-except
             self.log.exception("Problem in writing JSON: %r file to disk, took %.4fs",
                                self.overall_state, time.time() - start_time)
+            self.stats.unexpected_exception(ex, where="write_cluster_state_to_json_file")
 
     def create_node_map(self, cluster_state, observer_state):
         standby_nodes, master_node, master_instance = {}, None, None
@@ -546,6 +552,7 @@ class PgLookout(object):
         except subprocess.CalledProcessError as err:
             self.log.exception("Problem with executing: %r, return_code: %r, output: %r",
                                command, err.returncode, err.output)
+            self.stats.unexpected_exception(err, where="execute_external_command")
             return_code = err.returncode  # pylint: disable=no-member
         self.log.warning("Executed external command: %r, output: %r", return_code, output)
         return return_code
@@ -559,8 +566,9 @@ class PgLookout(object):
             self.log.debug("Creating alert file: %r", filepath)
             with open(filepath, "w") as fp:
                 fp.write("alert")
-        except:
+        except Exception as ex:  # pylint: disable=broad-except
             self.log.exception("Problem writing alert file: %r", filepath)
+            self.stats.unexpected_exception(ex, where="create_alert_file")
 
     def delete_alert_file(self, filename):
         try:
@@ -568,8 +576,9 @@ class PgLookout(object):
             if os.path.exists(filepath):
                 self.log.debug("Deleting alert file: %r", filepath)
                 os.unlink(filepath)
-        except:
+        except Exception as ex:  # pylint: disable=broad-except
             self.log.exception("Problem unlinking: %r", filepath)
+            self.stats.unexpected_exception(ex, where="delete_alert_file")
 
     def main_loop(self):
         while self.running:
@@ -578,12 +587,14 @@ class PgLookout(object):
             try:
                 sleep_time = float(self.config.get("replication_state_check_interval", 5.0))
                 self.check_cluster_state()
-            except:
+            except Exception as ex:  # pylint: disable=broad-except
                 self.log.exception("Failed to check cluster state")
+                self.stats.unexpected_exception(ex, where="main_loop1")
             try:
                 self.write_cluster_state_to_json_file()
-            except:
+            except Exception as ex:  # pylint: disable=broad-except
                 self.log.exception("Failed to write cluster state")
+                self.stats.unexpected_exception(ex, where="main_loop2")
             time.sleep(sleep_time)
 
     def run(self):

@@ -1,6 +1,5 @@
 [MESSAGES CONTROL]
 disable=
-    bare-except,
     duplicate-code,
     invalid-name,
     line-too-long,

@@ -14,7 +14,7 @@ from pglookout.common import (
 from pglookout.pglookout import PgLookout
 try:
     from mock import Mock  # pylint: disable=import-error
-except:  # py3k import location
+except ImportError:  # py3k import location
     from unittest.mock import Mock  # pylint: disable=import-error,no-name-in-module
 from unittest import TestCase
 import datetime

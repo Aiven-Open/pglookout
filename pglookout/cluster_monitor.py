@@ -54,9 +54,11 @@ def wait_select(conn, timeout=5.0):
 
 
 class ClusterMonitor(Thread):
-    def __init__(self, config, cluster_state, observer_state, create_alert_file, trigger_check_queue):
+    def __init__(self, config, cluster_state, observer_state, create_alert_file, trigger_check_queue,
+                 stats):
         Thread.__init__(self)
         self.log = logging.getLogger("ClusterMonitor")
+        self.stats = stats
         self.running = True
         self.cluster_state = cluster_state
         self.observer_state = observer_state
@@ -91,9 +93,10 @@ class ClusterMonitor(Thread):
             if "password authentication" in getattr(ex, "message", ""):
                 self.create_alert_file("authentication_error")
             conn = None  # make sure we don't try to use the connection if we timed out
-        except:
+        except Exception as ex:  # pylint: disable=broad-except
             self.log.exception("Failed to connect to %s (%s)",
                                instance, inst_info_str)
+            self.stats.unexpected_exception(ex, where="_connect_to_db")
             conn = None
         self.db_conns[instance] = conn
         return conn
@@ -117,8 +120,9 @@ class ClusterMonitor(Thread):
             self.log.warning("%s (%s) fetching state from observer: %r, %r",
                              ex.__class__.__name__, ex, instance, fetch_uri)
             result['connection'] = False
-        except:
+        except Exception as ex:  # pylint: disable=broad-except
             self.log.exception("Problem in fetching state from observer: %r, %r", instance, fetch_uri)
+            self.stats.unexpected_exception(ex, where="_fetch_observer_state")
             result['connection'] = False
         return result
 
