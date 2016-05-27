@@ -5,6 +5,7 @@ Copyright (c) 2015 Ohmu Ltd
 See LICENSE for details
 """
 
+from pglookout import statsd
 from pglookout.common import LOG_FORMAT
 from pglookout.cluster_monitor import ClusterMonitor
 from psycopg2.extensions import POLL_OK
@@ -79,7 +80,8 @@ def test_main_loop(psycopg2_connect):
         cluster_state=cluster_state,
         observer_state=observer_state,
         create_alert_file=create_alert_file,
-        trigger_check_queue=trigger_check_queue)
+        trigger_check_queue=trigger_check_queue,
+        stats=statsd.StatsClient(host=None))
     cm.main_monitoring_loop()
 
     assert len(cm.cluster_state) == 2
