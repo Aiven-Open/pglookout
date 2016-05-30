@@ -8,9 +8,9 @@ This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
 
-from .common import (
-    mask_connection_info, get_iso_timestamp, parse_iso_datetime,
-    set_syslog_handler)
+from . import logutil
+from .common import get_iso_timestamp, parse_iso_datetime
+from .pgutil import mask_connection_info
 from concurrent.futures import as_completed, ThreadPoolExecutor
 from email.utils import parsedate
 from psycopg2.extras import RealDictCursor
@@ -68,9 +68,11 @@ class ClusterMonitor(Thread):
         self.trigger_check_queue = trigger_check_queue
         self.session = requests.Session()
         if self.config.get("syslog"):
-            self.syslog_handler = set_syslog_handler(self.config.get("syslog_address", "/dev/log"),
-                                                     self.config.get("syslog_facility", "local2"),
-                                                     self.log)
+            self.syslog_handler = logutil.set_syslog_handler(
+                address=self.config.get("syslog_address", "/dev/log"),
+                facility=self.config.get("syslog_facility", "local2"),
+                logger=self.log,
+            )
         self.log.debug("Initialized ClusterMonitor with: %r", cluster_state)
 
     def _connect_to_db(self, instance, dsn):

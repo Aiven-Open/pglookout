@@ -9,12 +9,11 @@ See the file `LICENSE` for details.
 """
 
 from __future__ import print_function
-from . import statsd, version
+from . import logutil, statsd, version
 from .cluster_monitor import ClusterMonitor
-from .common import (
-    create_connection_string, get_connection_info, get_connection_info_from_config_line,
-    convert_xlog_location_to_offset, parse_iso_datetime, get_iso_timestamp,
-    set_syslog_handler, LOG_FORMAT, LOG_FORMAT_SYSLOG)
+from .common import convert_xlog_location_to_offset, parse_iso_datetime, get_iso_timestamp
+from .pgutil import (
+    create_connection_string, get_connection_info, get_connection_info_from_config_line)
 from .webserver import WebServer
 from psycopg2.extensions import adapt
 import argparse
@@ -34,11 +33,6 @@ try:
     from queue import Queue  # pylint: disable=import-error
 except ImportError:
     from Queue import Queue  # pylint: disable=import-error
-
-try:
-    from systemd import daemon  # pylint: disable=import-error
-except ImportError:
-    daemon = None
 
 
 class PgLookout(object):
@@ -92,9 +86,7 @@ class PgLookout(object):
         self.cluster_monitor.log.setLevel(self.log_level)
         self.webserver = WebServer(self.config, self.cluster_state)
 
-        if daemon:  # If we can import systemd we always notify it
-            daemon.notify("READY=1")
-            self.log.info("Sent startup notification to systemd that pglookout is READY")
+        logutil.notify_systemd("READY=1")
         self.log.info("PGLookout initialized, local hostname: %r, own_db: %r, cwd: %r",
                       socket.gethostname(), self.own_db, os.getcwd())
 
@@ -136,9 +128,11 @@ class PgLookout(object):
             self.cluster_monitor.config = copy.deepcopy(self.config)
 
         if self.config.get("syslog") and not self.syslog_handler:
-            self.syslog_handler = set_syslog_handler(self.config.get("syslog_address", "/dev/log"),
-                                                     self.config.get("syslog_facility", "local2"),
-                                                     logging.getLogger())
+            self.syslog_handler = logutil.set_syslog_handler(
+                address=self.config.get("syslog_address", "/dev/log"),
+                facility=self.config.get("syslog_facility", "local2"),
+                logger=logging.getLogger(),
+            )
         self.own_db = self.config.get("own_db")
 
         log_level_name = self.config.get("log_level", "DEBUG")
@@ -619,16 +613,7 @@ def main(args=None):
         print("pglookout: {!r} doesn't exist".format(arg.config))
         return 1
 
-    # Are we running under systemd?
-    if os.getenv("NOTIFY_SOCKET"):
-        logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT_SYSLOG)
-        if not daemon:
-            print(
-                "WARNING: Running under systemd but python-systemd not available, "
-                "systemd won't see our notifications"
-            )
-    else:
-        logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
+    logutil.configure_logging()
 
     pglookout = PgLookout(arg.config)
     pglookout.run()

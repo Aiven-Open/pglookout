@@ -8,10 +8,9 @@ This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
 
-from pglookout.common import (
-    get_connection_info, get_connection_info_from_config_line,
-    get_iso_timestamp)
+from pglookout.common import get_iso_timestamp
 from pglookout.pglookout import PgLookout
+from pglookout.pgutil import get_connection_info, get_connection_info_from_config_line
 try:
     from mock import Mock  # pylint: disable=import-error
 except ImportError:  # py3k import location

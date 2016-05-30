@@ -6,7 +6,6 @@ See LICENSE for details
 """
 
 from pglookout import statsd
-from pglookout.common import LOG_FORMAT
 from pglookout.cluster_monitor import ClusterMonitor
 from psycopg2.extensions import POLL_OK
 from datetime import datetime, timedelta
@@ -17,9 +16,6 @@ try:
 except ImportError:
     from Queue import Queue  # pylint: disable=import-error
     from mock import MagicMock, Mock, patch  # pylint: disable=import-error
-
-import logging
-logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
 
 def test_replication_lag():
