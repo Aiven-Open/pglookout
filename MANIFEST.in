@@ -1,0 +1,13 @@
+include pglookout/*.py
+include pglookout.json
+include pglookout.unit
+include test/*.py
+include scripts/*
+include NEWS
+include README.rst
+include version.py
+include setup.py
+include LICENSE
+include MANIFEST.in
+
+recursive-exclude examples *~ *.pyc \.*
