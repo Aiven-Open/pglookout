@@ -1,13 +1,15 @@
-include pglookout/*.py
-include pglookout.json
-include pglookout.unit
-include test/*.py
-include scripts/*
-include NEWS
-include README.rst
-include version.py
-include setup.py
 include LICENSE
 include MANIFEST.in
+include NEWS
+include README.rst
+include debian/*
+include examples/*
+include pglookout.json
+include pglookout.spec
+include pglookout.unit
+include pglookout/*.py
+include setup.py
+include test/*.py
+include version.py
 
-recursive-exclude examples *~ *.pyc \.*
+recursive-exclude *~ *.pyc \.*
