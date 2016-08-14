@@ -300,12 +300,13 @@ class PgLookout(object):
                 self.start_following_new_master(master_instance)
 
         own_state = self.cluster_state.get(self.own_db)
-        self.emit_stats(own_state)
 
-        # If we're an observer ourselves, we'll grab the IP address from HTTP server address
         observer_info = ",".join(observer_state) or "no"
-        if not self.own_db:
+        if self.own_db:  # Emit stats if we're a non-observer node
+            self.emit_stats(own_state)
+        else:  # We're an observer ourselves, grab the IP address from HTTP server address
             observer_info = self.config.get("http_address", observer_info)
+
         standby_info = ",".join(standby_nodes) or "no"
         self.log.debug("Cluster has %s standbys, %s observers and %s as master, own_db: %r, own_state: %r",
                        standby_info, observer_info, self.current_master, self.own_db, own_state or "observer")
