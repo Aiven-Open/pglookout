@@ -50,6 +50,7 @@ class PgLookout(object):
         self.disconnected_master_nodes = {}
         self.connected_observer_nodes = {}
         self.disconnected_observer_nodes = {}
+        self.replication_catchup_timeout = None
         self.replication_lag_warning_boundary = None
         self.replication_lag_failover_timeout = None
         self.missing_master_from_config_timeout = None
