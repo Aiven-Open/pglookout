@@ -50,7 +50,7 @@ build-dep-fed:
 		python-devel python3-devel pytest python3-pytest pylint python3-pylint \
 		python-mock python3-mock python-psycopg2 python3-psycopg2 python-pytest-cov \
 		python-requests python3-requests rpm-build systemd-python systemd-python3 \
-		python-futures
+		python-futures python3-flake8
 
 build-dep-deb:
 	sudo apt-get install \
