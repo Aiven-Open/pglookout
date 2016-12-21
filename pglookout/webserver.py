@@ -55,7 +55,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
         if self.path.startswith("/state.json"):
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
-            response = json.dumps(self.server.cluster_state, indent=4)
+            response = json.dumps(self.server.cluster_state, indent=4).encode("utf8")
             self.send_header('Content-length', len(response))
             self.end_headers()
             self.wfile.write(response)
