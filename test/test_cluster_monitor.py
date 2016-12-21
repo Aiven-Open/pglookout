@@ -59,7 +59,7 @@ def test_main_loop(psycopg2_connect):
 
         def fetchone(self):  # pylint: disable=no-self-use
             return {"pg_is_in_recovery": False, "pg_last_xact_replay_timestamp": datetime.utcnow(),
-                    "db_time": datetime.utcnow()}
+                    "db_time": datetime.utcnow(), "pg_last_xlog_replay_location": "1/0"}
 
     class FakeConn(Mock):  # pylint: disable=too-many-ancestors
         def cursor(self, cursor_factory):  # pylint: disable=unused-argument
