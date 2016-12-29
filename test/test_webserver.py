@@ -8,6 +8,7 @@ See the file `LICENSE` for details.
 """
 from pglookout.webserver import WebServer
 import requests
+import time
 
 
 def test_webserver():
@@ -15,6 +16,7 @@ def test_webserver():
     cluster_state = {}
     web = WebServer(config=config, cluster_state=cluster_state)
     web.start()
+    time.sleep(1)
     result = requests.get("http://127.0.0.1:15000/state.json").json()
     assert result == {}
     web.close()
