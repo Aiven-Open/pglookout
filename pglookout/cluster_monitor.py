@@ -177,8 +177,13 @@ class ClusterMonitor(Thread):
                 # This is only run on masters to create txid traffic every db_poll_interval
                 phase = "updating transaction on"
                 self.log.debug("%s %r", phase, instance)
-                c.execute("SELECT txid_current()")
+                # With pg_current_xlog_location we simulate replay_location on the master
+                # With txid_current we force a new transaction to occur every poll interval to ensure there's
+                # a heartbeat for the replication lag.
+                c.execute("SELECT txid_current(), pg_current_xlog_location() AS pg_last_xlog_replay_location")
                 wait_select(c.connection)
+                master_result = c.fetchone()
+                f_result["pg_last_xlog_replay_location"] = master_result["pg_last_xlog_replay_location"]
         except (PglookoutTimeout, psycopg2.DatabaseError, psycopg2.InterfaceError, psycopg2.OperationalError) as ex:
             self.log.warning("%s (%s) %s %s", ex.__class__.__name__, str(ex).strip(), phase, instance)
             db_conn.close()
@@ -203,7 +208,8 @@ class ClusterMonitor(Thread):
             result.update({
                 "pg_last_xlog_receive_location": None,
                 "pg_last_xact_replay_timestamp": None,
-                "pg_last_xlog_replay_location": None,
+                # We simulate replay_location with the results of pg_current_xlog_location on master
+                "pg_last_xlog_replay_location": result["pg_last_xlog_replay_location"],
                 "replication_time_lag": None,  # differentiate from actual lag=0.0
             })
         result.update({"db_time": get_iso_timestamp(result["db_time"]), "connection": True})
