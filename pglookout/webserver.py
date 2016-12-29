@@ -39,14 +39,16 @@ class WebServer(Thread):
     def run(self):
         # We bind the port only when we start running
         self.server = ThreadedWebServer((self.address, self.port), RequestHandler)
+        self.server.allow_reuse_address = True  # SO_REUSEADDR pylint: disable=attribute-defined-outside-init
         self.server.cluster_state = self.cluster_state
         self.server.log = self.log
         self.server.serve_forever()
 
     def close(self):
-        self.log.debug("Closing WebServer")
-        self.server.shutdown()
-        self.log.debug("Closed WebServer")
+        if self.server:
+            self.log.debug("Closing WebServer")
+            self.server.shutdown()
+            self.log.debug("Closed WebServer")
 
 
 class RequestHandler(SimpleHTTPRequestHandler):
