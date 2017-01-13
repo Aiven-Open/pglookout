@@ -23,6 +23,7 @@ except ImportError:  # Support Py3k
 class ThreadedWebServer(ThreadingMixIn, HTTPServer):
     cluster_state = None
     log = None
+    allow_reuse_address = True
 
 
 class WebServer(Thread):
@@ -39,7 +40,6 @@ class WebServer(Thread):
     def run(self):
         # We bind the port only when we start running
         self.server = ThreadedWebServer((self.address, self.port), RequestHandler)
-        self.server.allow_reuse_address = True  # SO_REUSEADDR pylint: disable=attribute-defined-outside-init
         self.server.cluster_state = self.cluster_state
         self.server.log = self.log
         self.server.serve_forever()
