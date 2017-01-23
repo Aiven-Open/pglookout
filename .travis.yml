@@ -15,3 +15,8 @@ script:
   - "make unittest"
 
 sudo: false
+
+addons:
+  apt:
+    packages:
+      - postgresql-9.4
