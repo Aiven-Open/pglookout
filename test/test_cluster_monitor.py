@@ -7,15 +7,12 @@ See LICENSE for details
 
 from pglookout import statsd
 from pglookout.cluster_monitor import ClusterMonitor
-from psycopg2.extensions import POLL_OK
 from datetime import datetime, timedelta
 
 try:
     from queue import Queue  # pylint: disable=import-error
-    from unittest.mock import MagicMock, Mock, patch  # pylint: disable=no-name-in-module
 except ImportError:
     from Queue import Queue  # pylint: disable=import-error
-    from mock import MagicMock, Mock, patch  # pylint: disable=import-error
 
 
 def test_replication_lag():
@@ -38,38 +35,21 @@ def test_replication_lag():
     assert result["replication_time_lag"] == 151200.0
 
 
-@patch("psycopg2.connect")
-def test_main_loop(psycopg2_connect):
-    config = {"remote_conns":
-              {"foo": "host=1.2.3.4 dbname=postgres user=pglookout password=fake_pass",
-               "bar": "host=2.3.4.5 dbname=postgres user=pglookout password=fake_pass"}}
+def test_main_loop(db):
+    config = {
+        "remote_conns": {
+            "test1db": db.connection_string("testuser"),
+            "test2db": db.connection_string("otheruser"),
+        },
+    }
     cluster_state = {}
     observer_state = {}
 
-    def alert_file_func(arg):  # pylint: disable=unused-argument
-        pass
+    def create_alert_file(arg):
+        raise Exception(arg)
 
-    create_alert_file = alert_file_func
     trigger_check_queue = Queue()
     trigger_check_queue.put("test entry so we don't wait five seconds to get one")
-
-    class FakeCursor(MagicMock):  # pylint: disable=too-many-ancestors
-        def execute(self, query):  # pylint: disable=no-self-use,unused-argument
-            return
-
-        def fetchone(self):  # pylint: disable=no-self-use
-            return {"pg_is_in_recovery": False, "pg_last_xact_replay_timestamp": datetime.utcnow(),
-                    "db_time": datetime.utcnow(), "pg_last_xlog_replay_location": "1/0"}
-
-    class FakeConn(Mock):  # pylint: disable=too-many-ancestors
-        def cursor(self, cursor_factory):  # pylint: disable=unused-argument
-            f = FakeCursor()
-            f.connection = self  # pylint: disable=attribute-defined-outside-init
-            return f
-
-        def poll(self):  # pylint: disable=no-self-use
-            return POLL_OK
-    psycopg2_connect.return_value = FakeConn()
 
     cm = ClusterMonitor(
         config=config,
@@ -77,9 +57,10 @@ def test_main_loop(psycopg2_connect):
         observer_state=observer_state,
         create_alert_file=create_alert_file,
         trigger_check_queue=trigger_check_queue,
-        stats=statsd.StatsClient(host=None))
+        stats=statsd.StatsClient(host=None),
+    )
     cm.main_monitoring_loop()
 
     assert len(cm.cluster_state) == 2
-    assert "foo" in cm.cluster_state
-    assert "bar" in cm.cluster_state
+    assert "test1db" in cm.cluster_state
+    assert "test2db" in cm.cluster_state
