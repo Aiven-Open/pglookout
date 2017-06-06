@@ -162,13 +162,22 @@ class ClusterMonitor(Thread):
             phase = "querying status from"
             self.log.debug("%s %r", phase, instance)
             c = db_conn.cursor(cursor_factory=RealDictCursor)
-            fields = [
-                "now() AS db_time",
-                "pg_is_in_recovery()",
-                "pg_last_xact_replay_timestamp()",
-                "pg_last_xlog_receive_location()",
-                "pg_last_xlog_replay_location()",
-            ]
+            if db_conn.server_version >= 100000:
+                fields = [
+                    "now() AS db_time",
+                    "pg_is_in_recovery()",
+                    "pg_last_xact_replay_timestamp()",
+                    "pg_last_wal_receive_lsn() AS pg_last_xlog_receive_location",
+                    "pg_last_wal_replay_lsn() AS pg_last_xlog_replay_location",
+                ]
+            else:
+                fields = [
+                    "now() AS db_time",
+                    "pg_is_in_recovery()",
+                    "pg_last_xact_replay_timestamp()",
+                    "pg_last_xlog_receive_location()",
+                    "pg_last_xlog_replay_location()",
+                ]
             query = "SELECT {}".format(", ".join(fields))
             c.execute(query)
             wait_select(c.connection)
@@ -177,10 +186,13 @@ class ClusterMonitor(Thread):
                 # This is only run on masters to create txid traffic every db_poll_interval
                 phase = "updating transaction on"
                 self.log.debug("%s %r", phase, instance)
-                # With pg_current_xlog_location we simulate replay_location on the master
+                # With pg_current_wal_lsn we simulate replay_location on the master
                 # With txid_current we force a new transaction to occur every poll interval to ensure there's
                 # a heartbeat for the replication lag.
-                c.execute("SELECT txid_current(), pg_current_xlog_location() AS pg_last_xlog_replay_location")
+                if db_conn.server_version >= 100000:
+                    c.execute("SELECT txid_current(), pg_current_wal_lsn() AS pg_last_xlog_replay_location")
+                else:
+                    c.execute("SELECT txid_current(), pg_current_xlog_location() AS pg_last_xlog_replay_location")
                 wait_select(c.connection)
                 master_result = c.fetchone()
                 f_result["pg_last_xlog_replay_location"] = master_result["pg_last_xlog_replay_location"]
