@@ -402,8 +402,8 @@ class PgLookout(object):
                 # without ever connecting to a master will not have an empty
                 # pg_last_xlog_receive_location
                 lsn = node_state['pg_last_xlog_receive_location'] or node_state['pg_last_xlog_replay_location']
-                xlog_pos = convert_xlog_location_to_offset(lsn) if lsn else 0
-                known_replication_positions.setdefault(xlog_pos, set()).add(instance)
+                wal_pos = convert_xlog_location_to_offset(lsn) if lsn else 0
+                known_replication_positions.setdefault(wal_pos, set()).add(instance)
         return known_replication_positions
 
     def _been_in_contact_with_master_within_failover_timeout(self):
