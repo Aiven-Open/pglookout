@@ -37,10 +37,9 @@ def get_connection_info(info):
     url format"""
     if isinstance(info, dict):
         return info.copy()
-    elif info.startswith("postgres://") or info.startswith("postgresql://"):
+    if info.startswith("postgres://") or info.startswith("postgresql://"):
         return parse_connection_string_url(info)
-    else:
-        return parse_connection_string_libpq(info)
+    return parse_connection_string_libpq(info)
 
 
 def parse_connection_string_url(url):
