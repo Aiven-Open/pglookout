@@ -1,9 +1,9 @@
-pglookout 1.4.0 (2016-xx-xx)
+pglookout 1.4.0 (2017-06-08)
 ============================
 
-* Fix statsd data sending bug breaking setups with observer nodes.
+* Fix statsd data sending bug breaking setups with observer nodes
 * To ease replication monitoring, include master node's replication
-  position in the pglookout state file.
+  position in the pglookout state file
 * Various bug and compatibility fixes
 
 pglookout 1.3.1 (2016-05-31)

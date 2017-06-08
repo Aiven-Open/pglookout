@@ -87,7 +87,7 @@ and eventually after the setup section, you can just run::
 
 Python/Other::
 
-  easy_install dist/pglookout-1.3.0-py2.7.egg
+  easy_install dist/pglookout-1.4.0-py2.7.egg
 
 On systems without ``systemd`` it is recommended that you run ``pglookout``
 under Supervisor_ or other similar process control system.
