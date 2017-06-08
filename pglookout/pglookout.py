@@ -236,9 +236,9 @@ class PgLookout(object):
         self.connected_observer_nodes = connected_observer_nodes
         self.disconnected_observer_nodes = disconnected_observer_nodes
 
-        if len(self.connected_master_nodes) == 0:
+        if not self.connected_master_nodes:
             self.log.warning("No known master node, disconnected masters: %r", list(disconnected_master_nodes))
-            if len(disconnected_master_nodes) > 0:
+            if disconnected_master_nodes:
                 master_instance, master_node = list(disconnected_master_nodes.items())[0]
         elif len(self.connected_master_nodes) == 1:
             master_instance, master_node = list(connected_master_nodes.items())[0]
@@ -408,7 +408,7 @@ class PgLookout(object):
 
     def _been_in_contact_with_master_within_failover_timeout(self):
         # no need to do anything here if there are no disconnected masters
-        if len(self.disconnected_master_nodes) > 0:
+        if self.disconnected_master_nodes:
             disconnected_master_node = list(self.disconnected_master_nodes.values())[0]
             db_time = disconnected_master_node.get('db_time', get_iso_timestamp()) or get_iso_timestamp()
             time_since_last_contact = datetime.datetime.utcnow() - parse_iso_datetime(db_time)
@@ -419,7 +419,7 @@ class PgLookout(object):
         return False
 
     def do_failover_decision(self, own_state, standby_nodes):
-        if len(self.connected_master_nodes) > 0 or self._been_in_contact_with_master_within_failover_timeout():
+        if self.connected_master_nodes or self._been_in_contact_with_master_within_failover_timeout():
             self.log.warning("We still have some connected masters: %r, not failing over", self.connected_master_nodes)
             return
 

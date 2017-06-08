@@ -48,8 +48,8 @@ class StatsClient(object):
             parts = [metric.encode("utf-8"), b":", str(value).encode("utf-8"), b"|", metric_type]
             send_tags = self._tags.copy()
             send_tags.update(tags or {})
-            for tag, value in send_tags.items():
-                parts.insert(1, ",{}={}".format(tag, value).encode("utf-8"))
+            for tag, tag_value in send_tags.items():
+                parts.insert(1, ",{}={}".format(tag, tag_value).encode("utf-8"))
 
             self._socket.sendto(b"".join(parts), self._dest_addr)
         except Exception as ex:  # pylint: disable=broad-except
