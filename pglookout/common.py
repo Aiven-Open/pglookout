@@ -8,8 +8,8 @@ import datetime
 import re
 
 
-def convert_xlog_location_to_offset(xlog_location):
-    log_id, offset = xlog_location.split("/")
+def convert_xlog_location_to_offset(wal_location):
+    log_id, offset = wal_location.split("/")
     return int(log_id, 16) << 32 | int(offset, 16)
 
 
