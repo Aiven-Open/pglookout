@@ -1,8 +1,7 @@
-pglookout 1.5.0 (UNRELEASED)
+pglookout 1.5.0 (2017-10-17)
 ============================
 
 * Support for PostgreSQL 10
-
 
 pglookout 1.4.0 (2017-06-08)
 ============================
