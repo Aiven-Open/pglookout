@@ -56,3 +56,5 @@ build-dep-deb:
 	sudo apt-get install \
 		build-essential devscripts dh-systemd \
 		python-all python-setuptools python-psycopg2 python-requests
+
+.PHONY: rpm
