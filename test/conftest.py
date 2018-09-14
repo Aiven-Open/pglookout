@@ -94,8 +94,8 @@ class TestPG:
             os.kill(self.pg.pid, signal.SIGQUIT)
         else:
             os.kill(self.pg.pid, signal.SIGTERM)
-        timeout = time.time() + 10
-        while (self.pg.poll() is None) and (time.time() < timeout):
+        timeout = time.monotonic() + 10
+        while (self.pg.poll() is None) and (time.monotonic() < timeout):
             time.sleep(0.1)
         if not force and self.pg.poll() is None:
             raise Exception("PG pid {} not dead".format(self.pg.pid))
