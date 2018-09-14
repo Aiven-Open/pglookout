@@ -343,7 +343,7 @@ class PgLookout(object):
                                      "disappeared from configuration")
                     self.do_failover_decision(own_state, standby_nodes)
                     return
-            elif (time.time() - self.cluster_nodes_change_time) >= self.replication_lag_failover_timeout:
+            else:
                 # we've never seen a master and more than failover_timeout
                 # seconds have passed since last config load (and start of
                 # connection attempts to other nodes); perform failover

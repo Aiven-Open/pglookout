@@ -12,7 +12,6 @@ from pglookout.pgutil import get_connection_info, get_connection_info_from_confi
 import datetime
 import json
 import os
-import time
 
 
 def test_connect_to_cluster_nodes_and_cleanup_old_nodes(pgl):
@@ -88,6 +87,9 @@ def _add_db_to_cluster_state(pgl, instance, pg_last_xlog_receive_location=None,
 def test_check_cluster_state_warning(pgl):
     _add_db_to_cluster_state(pgl, "kuu", pg_last_xlog_receive_location="1/aaaaaaaa",
                              pg_is_in_recovery=True, connection=True, replication_time_lag=40.0)
+
+    _add_db_to_cluster_state(pgl, "old_master", pg_is_in_recovery=False, connection=True)
+    pgl.current_master = "old_master"
     pgl.own_db = "kuu"
     pgl.over_warning_limit_command = "fake_command"
     pgl.execute_external_command.return_value = 0
@@ -211,9 +213,8 @@ def test_check_cluster_do_failover_two_slaves_when_the_one_ahead_can_never_be_pr
 
 
 def test_failover_with_no_master_anymore(pgl):
-    # this should not trigger an immediate failover as we have two
-    # standbys online but we've never seen a master so we wait a while
-    # and see what happens
+    # this should trigger an immediate failover as we have two
+    # standbys online but we've never seen a master
     pgl.own_db = "kuu"
     _add_db_to_cluster_state(pgl, "kuu", pg_last_xlog_receive_location="F/aaaaaaaa",
                              pg_is_in_recovery=True, connection=True, replication_time_lag=0)
@@ -221,40 +222,6 @@ def test_failover_with_no_master_anymore(pgl):
                              pg_is_in_recovery=True, connection=True, replication_time_lag=1)
 
     pgl.execute_external_command.return_value = 0
-    pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 0
-
-    # now we add a fake "current" master indicating that the cluster has
-    # been consistent at some point, this should trigger an immediate
-    # failover
-    pgl.current_master = "something obsolete"
-    pgl.check_cluster_state()
-    # No failover yet since we're  not over missing_master_from_config_timeout
-    assert pgl.execute_external_command.call_count == 0
-
-    pgl.cluster_nodes_change_time = time.time() - pgl.missing_master_from_config_timeout
-    pgl.current_master = "something obsolete"
-    pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 1
-
-
-def test_failover_with_no_master_timeout(pgl):
-    # this should not trigger an immediate failover as we have two
-    # standbys online but we've never seen a master so we wait a while
-    # and see what happens
-    pgl.own_db = "kuu"
-    _add_db_to_cluster_state(pgl, "kuu", pg_last_xlog_receive_location="F/aaaaaaaa",
-                             pg_is_in_recovery=True, connection=True, replication_time_lag=0)
-    _add_db_to_cluster_state(pgl, "puu", pg_last_xlog_receive_location="2/aaaaaaaa",
-                             pg_is_in_recovery=True, connection=True, replication_time_lag=1)
-
-    pgl.execute_external_command.return_value = 0
-    pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 0
-
-    # indicate that we haven't seen configuration changes for 5 minutes,
-    # that should trigger a failover as the timeout has passed
-    pgl.cluster_nodes_change_time = time.time() - 300
     pgl.check_cluster_state()
     assert pgl.execute_external_command.call_count == 1
 
