@@ -2,6 +2,7 @@ pglookout 1.6.0 (xxx)
 =====================
 
 * Support for PostgreSQL 11
+* Drop python2.7 and python3.4 support (3.4+ is required now)
 
 pglookout 1.5.0 (2017-10-17)
 ============================
