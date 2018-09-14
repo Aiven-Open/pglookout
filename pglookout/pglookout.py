@@ -35,7 +35,7 @@ except ImportError:
     from Queue import Queue  # pylint: disable=import-error
 
 
-class PgLookout(object):
+class PgLookout:
     def __init__(self, config_path):
         self.log = logging.getLogger("pglookout")
         self.stats = None
@@ -258,17 +258,14 @@ class PgLookout(object):
         replication lag alerts/metrics should not yet be generated.
         """
         replication_start_time = state.get("replication_start_time")
-        if replication_start_time:
-            replication_total_time = time.time() - replication_start_time
-            if replication_total_time > self.replication_catchup_timeout:
-                # we've been replicating for too long and should have caught up with the master already
-                return False
-
         min_lag = state.get("min_replication_time_lag", self.replication_lag_warning_boundary)
+        if replication_start_time and time.time() - replication_start_time > self.replication_catchup_timeout:
+            # we've been replicating for too long and should have caught up with the master already
+            return False
         if not state.get("pg_last_xlog_receive_location"):
             # node has not received anything from the master yet
             return True
-        elif min_lag >= self.replication_lag_warning_boundary:
+        if min_lag >= self.replication_lag_warning_boundary:
             # node is catching up the master and has not gotten close enough yet
             return True
 
@@ -456,7 +453,6 @@ class PgLookout(object):
                 self.log.warning("Canceling failover even though we were the node the furthest along, since "
                                  "this node has an existing maintenance_mode_file: %r",
                                  self.config.get("maintenance_mode_file", "/tmp/pglookout_maintenance_mode_file"))
-                return
             elif self.own_db in self.never_promote_these_nodes:
                 self.log.warning("Not doing a failover even though we were the node the furthest along, since this node: %r"
                                  " should never be promoted to master", self.own_db)
@@ -620,7 +616,7 @@ def main(args=None):
     logutil.configure_logging()
 
     pglookout = PgLookout(arg.config)
-    pglookout.run()
+    return pglookout.run()
 
 
 if __name__ == "__main__":

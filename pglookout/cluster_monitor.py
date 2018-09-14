@@ -41,7 +41,7 @@ def wait_select(conn, timeout=5.0):
         try:
             if state == psycopg2.extensions.POLL_OK:
                 return
-            elif state == psycopg2.extensions.POLL_READ:
+            if state == psycopg2.extensions.POLL_READ:
                 select.select([conn.fileno()], [], [], min(timeout, time_left))
             elif state == psycopg2.extensions.POLL_WRITE:
                 select.select([], [conn.fileno()], [], min(timeout, time_left))
@@ -116,7 +116,7 @@ class ClusterMonitor(Thread):
             if time_diff > datetime.timedelta(seconds=5):
                 self.log.error("Time difference between us and observer node %r is %r, response: %r, ignoring response",
                                instance, time_diff, response.json())  # pylint: disable=no-member
-                return
+                return None
             result.update(response.json())  # pylint: disable=no-member
         except requests.ConnectionError as ex:
             self.log.warning("%s (%s) fetching state from observer: %r, %r",

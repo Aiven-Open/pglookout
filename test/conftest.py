@@ -40,7 +40,7 @@ def pgl():
         pgl_.quit()
 
 
-class TestPG(object):
+class TestPG:
     def __init__(self, pgdata):
         self.pgbin = self.find_pgbin()
         self.pgdata = pgdata
