@@ -28,6 +28,7 @@ logutil.configure_logging()
 @pytest.yield_fixture
 def pgl():
     pgl_ = PgLookout("pglookout.json")
+    pgl_.config["remote_conns"] = {}
     pgl_.check_for_maintenance_mode_file = Mock()
     pgl_.check_for_maintenance_mode_file.return_value = False
     pgl_.cluster_monitor._connect_to_db = Mock()  # pylint: disable=protected-access

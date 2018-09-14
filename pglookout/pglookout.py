@@ -288,8 +288,10 @@ class PgLookout(object):
         master_node = None
         cluster_state = copy.deepcopy(self.cluster_state)
         observer_state = copy.deepcopy(self.observer_state)
-        if not cluster_state:
-            self.log.warning("No cluster state, probably still starting up")
+        configured_node_count = len(self.config.get("remote_conns", {}))
+        if not cluster_state or len(cluster_state) != configured_node_count:
+            self.log.warning("No cluster state: %r, probably still starting up, node_count: %r, configured node_count: %r",
+                             cluster_state, len(cluster_state), configured_node_count)
             return
 
         master_instance, master_node, standby_nodes = self.create_node_map(cluster_state, observer_state)
@@ -327,9 +329,10 @@ class PgLookout(object):
         if not master_node:
             # no master node at all in the cluster?
             self.log.warning("No master node in cluster, %r standby nodes exist, "
-                             "%.2f seconds since last cluster config update, failover timeout set to %r seconds",
+                             "%.2f seconds since last cluster config update, failover timeout set "
+                             "to %r seconds, previous master: %r",
                              len(standby_nodes), time.time() - self.cluster_nodes_change_time,
-                             self.replication_lag_failover_timeout)
+                             self.replication_lag_failover_timeout, self.current_master)
             if self.current_master:
                 self.trigger_check_queue.put("Master is missing, ask for immediate state check")
                 if (time.time() - self.cluster_nodes_change_time) >= self.missing_master_from_config_timeout:
@@ -427,7 +430,6 @@ class PgLookout(object):
         if not known_replication_positions:
             self.log.warning("No known replication positions, canceling failover consideration")
             return
-
         # If there are multiple nodes with the same replication positions pick the one with the "highest" name
         # to make sure pglookouts running on all standbys make the same decision.  The rationale for picking
         # the "highest" node is that there's no obvious way for pglookout to decide which of the nodes is

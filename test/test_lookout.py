@@ -23,7 +23,7 @@ def test_connect_to_cluster_nodes_and_cleanup_old_nodes(pgl):
         None: "foo",
     }
     pgl.cluster_monitor.connect_to_cluster_nodes_and_cleanup_old_nodes()
-    assert pgl.cluster_monitor.db_conns == {"1.2.3.4": "bar", "2.3.4.5": "foo"}
+    assert pgl.cluster_monitor.db_conns == {}
 
 
 def test_state_file_write(pgl, tmpdir):
@@ -558,42 +558,41 @@ def test_node_map_disconnected_current_master(pgl):
 
 
 def test_standbys_failover_equal_replication_positions(pgl):
-    now = get_iso_timestamp(datetime.datetime.utcnow())
-    pgl.cluster_state = {
-        "192.168.54.183": {
-            "connection": True,
-            "db_time": now,
-            "fetch_time": now,
-            "pg_is_in_recovery": True,
-            "pg_last_xact_replay_timestamp": "2015-04-28T11:21:56.098946+00:00Z",
-            "pg_last_xlog_receive_location": "0/70004D8",
-            "pg_last_xlog_replay_location": "0/70004D8",
-            "replication_time_lag": 400.435871,
-            "min_replication_time_lag": 0,  # simulate that we've been in sync once
-        },
-        "192.168.57.180": {
-            "connection": False,
-            "db_time": "2015-04-28T11:21:55.830432Z",
-            "fetch_time": now,
-            "pg_is_in_recovery": False,
-            "pg_last_xact_replay_timestamp": None,
-            "pg_last_xlog_receive_location": None,
-            "pg_last_xlog_replay_location": None,
-            "replication_time_lag": 0.0,
-            "min_replication_time_lag": 0,  # simulate that we've been in sync once
-        },
-        "192.168.63.4": {
-            "connection": True,
-            "db_time": now,
-            "fetch_time": now,
-            "pg_is_in_recovery": True,
-            "pg_last_xact_replay_timestamp": "2015-04-28T11:21:56.098946+00:00Z",
-            "pg_last_xlog_receive_location": "0/70004D8",
-            "pg_last_xlog_replay_location": "0/70004D8",
-            "replication_time_lag": 401.104655,
-            "min_replication_time_lag": 0,  # simulate that we've been in sync once
-        },
-    }
+    now = datetime.datetime.utcnow()
+    _add_db_to_cluster_state(
+        pgl,
+        instance="192.168.54.183",
+        pg_last_xlog_receive_location="0/70004D8",
+        pg_is_in_recovery=True,
+        connection=True,
+        replication_time_lag=400.435871,
+        fetch_time=now,
+        db_time=now,
+        conn_info="foobar",
+    )
+    _add_db_to_cluster_state(
+        pgl,
+        instance="192.168.57.180",
+        pg_last_xlog_receive_location=None,
+        pg_is_in_recovery=False,
+        connection=False,
+        replication_time_lag=0.0,
+        fetch_time=now - datetime.timedelta(seconds=3600),
+        db_time=now - datetime.timedelta(seconds=3600),
+        conn_info="foobar",
+    )
+    _add_db_to_cluster_state(
+        pgl,
+        instance="192.168.63.4",
+        pg_last_xlog_receive_location="0/70004D8",
+        pg_is_in_recovery=True,
+        connection=True,
+        replication_time_lag=401.104655,
+        fetch_time=now,
+        db_time=now,
+        conn_info="foobar",
+    )
+
     pgl.current_master = "192.168.57.180"
     # We select the node with the "highest" identifier so call_count should stay zero if we're not the
     # highest standby currently.
