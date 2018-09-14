@@ -15,6 +15,7 @@ from .pgutil import (
     create_connection_string, get_connection_info, get_connection_info_from_config_line)
 from .webserver import WebServer
 from psycopg2.extensions import adapt
+from queue import Queue
 import argparse
 import copy
 import datetime
@@ -27,11 +28,6 @@ import socket
 import subprocess
 import sys
 import time
-
-try:
-    from queue import Queue  # pylint: disable=import-error
-except ImportError:
-    from Queue import Queue  # pylint: disable=import-error
 
 
 class PgLookout:

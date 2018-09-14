@@ -4,13 +4,10 @@ pglookout - test configuration
 Copyright (c) 2016 Ohmu Ltd
 See LICENSE for details
 """
-try:
-    from mock import Mock  # pylint: disable=import-error
-except ImportError:  # py3k import location
-    from unittest.mock import Mock  # pylint: disable=import-error,no-name-in-module
 from pglookout import logutil, pgutil
 from pglookout.pglookout import PgLookout
 from py import path as py_path  # pylint: disable=no-name-in-module
+from unittest.mock import Mock
 import os
 import pytest
 import signal

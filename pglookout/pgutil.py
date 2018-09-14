@@ -5,11 +5,7 @@ pglookout - postgresql utility functions
 Copyright (c) 2015 Ohmu Ltd
 See LICENSE for details
 """
-
-try:
-    from urllib.parse import urlparse, parse_qs  # pylint: disable=no-name-in-module, import-error
-except ImportError:
-    from urlparse import urlparse, parse_qs  # pylint: disable=no-name-in-module, import-error
+from urllib.parse import urlparse, parse_qs  # pylint: disable=no-name-in-module, import-error
 
 
 def create_connection_string(connection_info):

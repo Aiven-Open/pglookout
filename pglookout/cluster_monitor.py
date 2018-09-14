@@ -14,6 +14,7 @@ from .pgutil import mask_connection_info
 from concurrent.futures import as_completed, ThreadPoolExecutor
 from email.utils import parsedate
 from psycopg2.extras import RealDictCursor
+from queue import Empty
 from threading import Thread
 import datetime
 import errno
@@ -22,11 +23,6 @@ import psycopg2
 import requests
 import select
 import time
-
-try:
-    from queue import Empty  # pylint: disable=import-error
-except ImportError:
-    from Queue import Empty  # pylint: disable=import-error
 
 
 class PglookoutTimeout(Exception):
