@@ -8,7 +8,6 @@ This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
 
-from __future__ import print_function
 from . import logutil, statsd, version
 from .cluster_monitor import ClusterMonitor
 from .common import convert_xlog_location_to_offset, parse_iso_datetime, get_iso_timestamp
