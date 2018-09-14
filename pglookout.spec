@@ -1,9 +1,3 @@
-%if %{?python3_sitelib:1}0
-%global use_python3 1
-%else
-%global use_python3 0
-%endif
-
 Name:           pglookout
 Version:        %{major_version}
 Release:        %{minor_version}%{?dist}
@@ -13,14 +7,9 @@ License:        ASL 2.0
 Source0:        pglookout-rpm-src.tar
 Requires(pre):  shadow-utils
 Requires:       postgresql-server, systemd
-%if %{use_python3}
 Obsoletes:      python3-pglookout
 Requires:       python3-psycopg2, python3-requests, python3-setuptools, systemd-python3, systemd
 BuildRequires:  python3-pytest, python3-pylint
-%else
-Requires:       python-psycopg2, python-requests, python-futures, python-setuptools, systemd-python, systemd
-BuildRequires:  pytest, pylint
-%endif
 BuildRequires:  %{requires}
 BuildArch:      noarch
 
@@ -36,22 +25,14 @@ to promote a new master in case the previous one goes missing.
 
 
 %install
-%if %{use_python3}
 python3 setup.py install --prefix=%{_prefix} --root=%{buildroot}
-%else
-python2 setup.py install --prefix=%{_prefix} --root=%{buildroot}
-%endif
 sed -e "s@#!/bin/python@#!%{_bindir}/python@" -i %{buildroot}%{_bindir}/*
 %{__install} -Dm0644 pglookout.unit %{buildroot}%{_unitdir}/pglookout.service
 %{__mkdir_p} %{buildroot}%{_localstatedir}/lib/pglookout
 
 
 %check
-%if %{use_python3}
 make test PYTHON=python3
-%else
-make test PYTHON=python2
-%endif
 
 
 %files
@@ -59,11 +40,7 @@ make test PYTHON=python2
 %doc LICENSE README.rst pglookout.json
 %{_bindir}/pglookout*
 %{_unitdir}/pglookout.service
-%if %{use_python3}
 %{python3_sitelib}/*
-%else
-%{python_sitelib}/*
-%endif
 %attr(0755, postgres, postgres) %{_localstatedir}/lib/pglookout
 
 
