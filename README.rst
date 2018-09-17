@@ -1,8 +1,8 @@
 pglookout |BuildStatus|_
 ========================
 
-.. |BuildStatus| image:: https://travis-ci.org/ohmu/pglookout.png?branch=master
-.. _BuildStatus: https://travis-ci.org/ohmu/pglookout
+.. |BuildStatus| image:: https://travis-ci.org/aiven/pglookout.png?branch=master
+.. _BuildStatus: https://travis-ci.org/aiven/pglookout
 
 pglookout is a PostgreSQL replication monitoring and failover daemon.
 pglookout monitors PG database nodes and their replication status and acts
@@ -377,13 +377,13 @@ Database`_ developers <pglookout@ohmu.fi>.
 .. _`Aiven Cloud Database`: https://aiven.io/
 
 Recent contributors are listed on the GitHub project page,
-https://github.com/ohmu/pglookout/graphs/contributors
+https://github.com/aiven/pglookout/graphs/contributors
 
 
 Contact
 =======
 
 Bug reports and patches are very welcome, please post them as GitHub issues
-and pull requests at https://github.com/ohmu/pglookout .  Any possible
+and pull requests at https://github.com/aiven/pglookout .  Any possible
 vulnerabilities or other serious issues should be reported directly to the
 maintainers <pglookout@ohmu.fi>.

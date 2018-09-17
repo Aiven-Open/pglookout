@@ -7,7 +7,7 @@
 Name:           pglookout
 Version:        %{major_version}
 Release:        %{minor_version}%{?dist}
-Url:            https://github.com/ohmu/pglookout
+Url:            https://github.com/aiven/pglookout
 Summary:        PostgreSQL replication monitoring and failover daemon
 License:        ASL 2.0
 Source0:        pglookout-rpm-src.tar
