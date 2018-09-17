@@ -14,7 +14,7 @@ import logging
 import socket
 
 
-class StatsClient(object):
+class StatsClient:
     def __init__(self, host="127.0.0.1", port=8125, tags=None):
         self.log = logging.getLogger("StatsClient")
         self._dest_addr = (host, port)

@@ -46,6 +46,7 @@ def main(args=None):
         print(current_master)
     except:  # pylint: disable=bare-except
         return -1
+    return 0
 
 
 if __name__ == "__main__":

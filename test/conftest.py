@@ -19,7 +19,7 @@ import tempfile
 import time
 
 
-PG_VERSIONS = ["10", "9.6", "9.5", "9.4", "9.3", "9.2"]
+PG_VERSIONS = ["11", "10", "9.6", "9.5", "9.4", "9.3", "9.2"]
 
 
 logutil.configure_logging()
@@ -28,6 +28,7 @@ logutil.configure_logging()
 @pytest.yield_fixture
 def pgl():
     pgl_ = PgLookout("pglookout.json")
+    pgl_.config["remote_conns"] = {}
     pgl_.check_for_maintenance_mode_file = Mock()
     pgl_.check_for_maintenance_mode_file.return_value = False
     pgl_.cluster_monitor._connect_to_db = Mock()  # pylint: disable=protected-access
@@ -39,7 +40,7 @@ def pgl():
         pgl_.quit()
 
 
-class TestPG(object):
+class TestPG:
     def __init__(self, pgdata):
         self.pgbin = self.find_pgbin()
         self.pgdata = pgdata

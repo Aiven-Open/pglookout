@@ -12,7 +12,6 @@ from pglookout.pgutil import get_connection_info, get_connection_info_from_confi
 import datetime
 import json
 import os
-import time
 
 
 def test_connect_to_cluster_nodes_and_cleanup_old_nodes(pgl):
@@ -23,7 +22,7 @@ def test_connect_to_cluster_nodes_and_cleanup_old_nodes(pgl):
         None: "foo",
     }
     pgl.cluster_monitor.connect_to_cluster_nodes_and_cleanup_old_nodes()
-    assert pgl.cluster_monitor.db_conns == {"1.2.3.4": "bar", "2.3.4.5": "foo"}
+    assert pgl.cluster_monitor.db_conns == {}
 
 
 def test_state_file_write(pgl, tmpdir):
@@ -88,6 +87,9 @@ def _add_db_to_cluster_state(pgl, instance, pg_last_xlog_receive_location=None,
 def test_check_cluster_state_warning(pgl):
     _add_db_to_cluster_state(pgl, "kuu", pg_last_xlog_receive_location="1/aaaaaaaa",
                              pg_is_in_recovery=True, connection=True, replication_time_lag=40.0)
+
+    _add_db_to_cluster_state(pgl, "old_master", pg_is_in_recovery=False, connection=True)
+    pgl.current_master = "old_master"
     pgl.own_db = "kuu"
     pgl.over_warning_limit_command = "fake_command"
     pgl.execute_external_command.return_value = 0
@@ -211,9 +213,8 @@ def test_check_cluster_do_failover_two_slaves_when_the_one_ahead_can_never_be_pr
 
 
 def test_failover_with_no_master_anymore(pgl):
-    # this should not trigger an immediate failover as we have two
-    # standbys online but we've never seen a master so we wait a while
-    # and see what happens
+    # this should trigger an immediate failover as we have two
+    # standbys online but we've never seen a master
     pgl.own_db = "kuu"
     _add_db_to_cluster_state(pgl, "kuu", pg_last_xlog_receive_location="F/aaaaaaaa",
                              pg_is_in_recovery=True, connection=True, replication_time_lag=0)
@@ -221,40 +222,6 @@ def test_failover_with_no_master_anymore(pgl):
                              pg_is_in_recovery=True, connection=True, replication_time_lag=1)
 
     pgl.execute_external_command.return_value = 0
-    pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 0
-
-    # now we add a fake "current" master indicating that the cluster has
-    # been consistent at some point, this should trigger an immediate
-    # failover
-    pgl.current_master = "something obsolete"
-    pgl.check_cluster_state()
-    # No failover yet since we're  not over missing_master_from_config_timeout
-    assert pgl.execute_external_command.call_count == 0
-
-    pgl.cluster_nodes_change_time = time.time() - pgl.missing_master_from_config_timeout
-    pgl.current_master = "something obsolete"
-    pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 1
-
-
-def test_failover_with_no_master_timeout(pgl):
-    # this should not trigger an immediate failover as we have two
-    # standbys online but we've never seen a master so we wait a while
-    # and see what happens
-    pgl.own_db = "kuu"
-    _add_db_to_cluster_state(pgl, "kuu", pg_last_xlog_receive_location="F/aaaaaaaa",
-                             pg_is_in_recovery=True, connection=True, replication_time_lag=0)
-    _add_db_to_cluster_state(pgl, "puu", pg_last_xlog_receive_location="2/aaaaaaaa",
-                             pg_is_in_recovery=True, connection=True, replication_time_lag=1)
-
-    pgl.execute_external_command.return_value = 0
-    pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 0
-
-    # indicate that we haven't seen configuration changes for 5 minutes,
-    # that should trigger a failover as the timeout has passed
-    pgl.cluster_nodes_change_time = time.time() - 300
     pgl.check_cluster_state()
     assert pgl.execute_external_command.call_count == 1
 
@@ -558,42 +525,41 @@ def test_node_map_disconnected_current_master(pgl):
 
 
 def test_standbys_failover_equal_replication_positions(pgl):
-    now = get_iso_timestamp(datetime.datetime.utcnow())
-    pgl.cluster_state = {
-        "192.168.54.183": {
-            "connection": True,
-            "db_time": now,
-            "fetch_time": now,
-            "pg_is_in_recovery": True,
-            "pg_last_xact_replay_timestamp": "2015-04-28T11:21:56.098946+00:00Z",
-            "pg_last_xlog_receive_location": "0/70004D8",
-            "pg_last_xlog_replay_location": "0/70004D8",
-            "replication_time_lag": 400.435871,
-            "min_replication_time_lag": 0,  # simulate that we've been in sync once
-        },
-        "192.168.57.180": {
-            "connection": False,
-            "db_time": "2015-04-28T11:21:55.830432Z",
-            "fetch_time": now,
-            "pg_is_in_recovery": False,
-            "pg_last_xact_replay_timestamp": None,
-            "pg_last_xlog_receive_location": None,
-            "pg_last_xlog_replay_location": None,
-            "replication_time_lag": 0.0,
-            "min_replication_time_lag": 0,  # simulate that we've been in sync once
-        },
-        "192.168.63.4": {
-            "connection": True,
-            "db_time": now,
-            "fetch_time": now,
-            "pg_is_in_recovery": True,
-            "pg_last_xact_replay_timestamp": "2015-04-28T11:21:56.098946+00:00Z",
-            "pg_last_xlog_receive_location": "0/70004D8",
-            "pg_last_xlog_replay_location": "0/70004D8",
-            "replication_time_lag": 401.104655,
-            "min_replication_time_lag": 0,  # simulate that we've been in sync once
-        },
-    }
+    now = datetime.datetime.utcnow()
+    _add_db_to_cluster_state(
+        pgl,
+        instance="192.168.54.183",
+        pg_last_xlog_receive_location="0/70004D8",
+        pg_is_in_recovery=True,
+        connection=True,
+        replication_time_lag=400.435871,
+        fetch_time=now,
+        db_time=now,
+        conn_info="foobar",
+    )
+    _add_db_to_cluster_state(
+        pgl,
+        instance="192.168.57.180",
+        pg_last_xlog_receive_location=None,
+        pg_is_in_recovery=False,
+        connection=False,
+        replication_time_lag=0.0,
+        fetch_time=now - datetime.timedelta(seconds=3600),
+        db_time=now - datetime.timedelta(seconds=3600),
+        conn_info="foobar",
+    )
+    _add_db_to_cluster_state(
+        pgl,
+        instance="192.168.63.4",
+        pg_last_xlog_receive_location="0/70004D8",
+        pg_is_in_recovery=True,
+        connection=True,
+        replication_time_lag=401.104655,
+        fetch_time=now,
+        db_time=now,
+        conn_info="foobar",
+    )
+
     pgl.current_master = "192.168.57.180"
     # We select the node with the "highest" identifier so call_count should stay zero if we're not the
     # highest standby currently.

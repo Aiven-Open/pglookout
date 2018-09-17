@@ -35,7 +35,7 @@ except ImportError:
     from Queue import Queue  # pylint: disable=import-error
 
 
-class PgLookout(object):
+class PgLookout:
     def __init__(self, config_path):
         self.log = logging.getLogger("pglookout")
         self.stats = None
@@ -258,17 +258,14 @@ class PgLookout(object):
         replication lag alerts/metrics should not yet be generated.
         """
         replication_start_time = state.get("replication_start_time")
-        if replication_start_time:
-            replication_total_time = time.time() - replication_start_time
-            if replication_total_time > self.replication_catchup_timeout:
-                # we've been replicating for too long and should have caught up with the master already
-                return False
-
         min_lag = state.get("min_replication_time_lag", self.replication_lag_warning_boundary)
+        if replication_start_time and time.time() - replication_start_time > self.replication_catchup_timeout:
+            # we've been replicating for too long and should have caught up with the master already
+            return False
         if not state.get("pg_last_xlog_receive_location"):
             # node has not received anything from the master yet
             return True
-        elif min_lag >= self.replication_lag_warning_boundary:
+        if min_lag >= self.replication_lag_warning_boundary:
             # node is catching up the master and has not gotten close enough yet
             return True
 
@@ -288,8 +285,10 @@ class PgLookout(object):
         master_node = None
         cluster_state = copy.deepcopy(self.cluster_state)
         observer_state = copy.deepcopy(self.observer_state)
-        if not cluster_state:
-            self.log.warning("No cluster state, probably still starting up")
+        configured_node_count = len(self.config.get("remote_conns", {}))
+        if not cluster_state or len(cluster_state) != configured_node_count:
+            self.log.warning("No cluster state: %r, probably still starting up, node_count: %r, configured node_count: %r",
+                             cluster_state, len(cluster_state), configured_node_count)
             return
 
         master_instance, master_node, standby_nodes = self.create_node_map(cluster_state, observer_state)
@@ -327,9 +326,10 @@ class PgLookout(object):
         if not master_node:
             # no master node at all in the cluster?
             self.log.warning("No master node in cluster, %r standby nodes exist, "
-                             "%.2f seconds since last cluster config update, failover timeout set to %r seconds",
+                             "%.2f seconds since last cluster config update, failover timeout set "
+                             "to %r seconds, previous master: %r",
                              len(standby_nodes), time.time() - self.cluster_nodes_change_time,
-                             self.replication_lag_failover_timeout)
+                             self.replication_lag_failover_timeout, self.current_master)
             if self.current_master:
                 self.trigger_check_queue.put("Master is missing, ask for immediate state check")
                 if (time.time() - self.cluster_nodes_change_time) >= self.missing_master_from_config_timeout:
@@ -340,7 +340,7 @@ class PgLookout(object):
                                      "disappeared from configuration")
                     self.do_failover_decision(own_state, standby_nodes)
                     return
-            elif (time.time() - self.cluster_nodes_change_time) >= self.replication_lag_failover_timeout:
+            else:
                 # we've never seen a master and more than failover_timeout
                 # seconds have passed since last config load (and start of
                 # connection attempts to other nodes); perform failover
@@ -427,7 +427,6 @@ class PgLookout(object):
         if not known_replication_positions:
             self.log.warning("No known replication positions, canceling failover consideration")
             return
-
         # If there are multiple nodes with the same replication positions pick the one with the "highest" name
         # to make sure pglookouts running on all standbys make the same decision.  The rationale for picking
         # the "highest" node is that there's no obvious way for pglookout to decide which of the nodes is
@@ -454,7 +453,6 @@ class PgLookout(object):
                 self.log.warning("Canceling failover even though we were the node the furthest along, since "
                                  "this node has an existing maintenance_mode_file: %r",
                                  self.config.get("maintenance_mode_file", "/tmp/pglookout_maintenance_mode_file"))
-                return
             elif self.own_db in self.never_promote_these_nodes:
                 self.log.warning("Not doing a failover even though we were the node the furthest along, since this node: %r"
                                  " should never be promoted to master", self.own_db)
@@ -618,7 +616,7 @@ def main(args=None):
     logutil.configure_logging()
 
     pglookout = PgLookout(arg.config)
-    pglookout.run()
+    return pglookout.run()
 
 
 if __name__ == "__main__":
