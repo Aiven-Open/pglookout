@@ -513,8 +513,7 @@ class PgLookout:
         # Replace old recovery.conf with a fresh copy
         with open(path_to_recovery_conf + "_temp", "w") as fp:
             fp.write("\n".join(new_conf) + "\n")
-        self.log.debug("Previous recovery.conf: %s", old_conf)
-        self.log.debug("Newly written recovery.conf: %s", new_conf)
+        self.log.info("Previous recovery.conf: %r, new recovery.conf: %r", old_conf, new_conf)
         os.rename(path_to_recovery_conf + "_temp", path_to_recovery_conf)
         return True
 
