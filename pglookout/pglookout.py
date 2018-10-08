@@ -527,7 +527,7 @@ class PgLookout:
         start_command = self.config.get("pg_start_command", "").split()
         stop_command = self.config.get("pg_stop_command", "").split()
         self.log.info("Starting to follow new master %r, modified recovery.conf and restarting PostgreSQL"
-                      "; pg_stop_command %r; pg_start_command %r",
+                      "; pg_start_command %r; pg_stop_command %r",
                       new_master_instance, start_command, stop_command)
         self.execute_external_command(stop_command)
         self.execute_external_command(start_command)
