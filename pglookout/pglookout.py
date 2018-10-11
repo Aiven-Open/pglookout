@@ -498,7 +498,7 @@ class PgLookout:
         new_conn_info["host"] = master_instance_conn_info["host"]
         if "port" in master_instance_conn_info:
             new_conn_info["port"] = master_instance_conn_info["port"]
-        if new_conn_info == old_conn_info and has_recovery_target_timeline:
+        if new_conn_info == old_conn_info:
             self.log.debug("recovery.conf already contains conninfo matching %r, not updating", new_master_instance)
             return False
         # Otherwise we append the new primary_conninfo
