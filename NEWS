@@ -1,8 +1,11 @@
-pglookout 1.6.0 (xxx)
-=====================
+pglookout 2.0.0 (2018-10-12)
+============================
 
 * Support for PostgreSQL 11
-* Drop python2.7 and python3.4 support (3.4+ is required now)
+* Drop python2.7 and python3 support before 3.4 support, Python 3.4+ is
+  now required for running pglookout
+* Detect if we're already following the same master even if the
+  standby's recovery.conf is lacking a recovery_target_timeline parameter.
 
 pglookout 1.5.0 (2017-10-17)
 ============================
