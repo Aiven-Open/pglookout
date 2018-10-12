@@ -8,11 +8,7 @@ See LICENSE for details
 from pglookout import statsd
 from pglookout.cluster_monitor import ClusterMonitor
 from datetime import datetime, timedelta
-
-try:
-    from queue import Queue  # pylint: disable=import-error
-except ImportError:
-    from Queue import Queue  # pylint: disable=import-error
+from queue import Queue
 
 
 def test_replication_lag():

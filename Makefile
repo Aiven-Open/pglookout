@@ -2,7 +2,7 @@ short_ver = 1.5.0
 long_ver = $(shell git describe --long 2>/dev/null || echo $(short_ver)-0-unknown-g`git describe --always`)
 generated = pglookout/version.py
 
-PYTHON ?= python
+PYTHON ?= python3
 PYLINT_DIRS = pglookout/ test/
 
 all: $(generated)
@@ -47,14 +47,14 @@ rpm: $(generated)
 
 build-dep-fed:
 	sudo dnf -y install --best --allowerasing \
-		python-devel python3-devel pytest python3-pytest pylint python3-pylint \
-		python-mock python3-mock python-psycopg2 python3-psycopg2 python-pytest-cov \
-		python-requests python3-requests rpm-build systemd-python systemd-python3 \
-		python-futures python3-flake8 python3-pytest-cov
+		python3-devel pytest python3-pytest python3-pylint \
+		python3-mock python-psycopg2 python3-psycopg2 \
+		python3-requests rpm-build systemd-python3 \
+		python3-flake8 python3-pytest-cov
 
 build-dep-deb:
 	sudo apt-get install \
 		build-essential devscripts dh-systemd \
-		python-all python-setuptools python-psycopg2 python-requests
+		python3-all python3-setuptools python3-psycopg2 python3-requests
 
 .PHONY: rpm

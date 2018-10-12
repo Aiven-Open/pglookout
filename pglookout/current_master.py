@@ -37,7 +37,7 @@ def main(args=None):
         with open(arg.state, "r") as fp:
             config = json.load(fp)
         state_file_path = config.get("json_state_file_path", "/tmp/pglookout_state.json")  # pylint: disable=no-member
-        if time.time() - os.stat(state_file_path).st_mtime > 60.0:
+        if time.monotonic() - os.stat(state_file_path).st_mtime > 60.0:
             # file older than one minute, pglookout probably dead, exit with minus one
             return -1
         with open(state_file_path, "r") as fp:

@@ -8,16 +8,10 @@ This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
 import json
+from http.server import HTTPServer, SimpleHTTPRequestHandler
 from logging import getLogger
+from socketserver import ThreadingMixIn
 from threading import Thread
-
-try:
-    from SocketServer import ThreadingMixIn  # pylint: disable=import-error
-    from BaseHTTPServer import HTTPServer  # pylint: disable=import-error
-    from SimpleHTTPServer import SimpleHTTPRequestHandler  # pylint: disable=import-error
-except ImportError:  # Support Py3k
-    from socketserver import ThreadingMixIn  # pylint: disable=import-error
-    from http.server import HTTPServer, SimpleHTTPRequestHandler  # pylint: disable=import-error
 
 
 class ThreadedWebServer(ThreadingMixIn, HTTPServer):

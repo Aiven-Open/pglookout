@@ -4,13 +4,10 @@ pglookout - test configuration
 Copyright (c) 2016 Ohmu Ltd
 See LICENSE for details
 """
-try:
-    from mock import Mock  # pylint: disable=import-error
-except ImportError:  # py3k import location
-    from unittest.mock import Mock  # pylint: disable=import-error,no-name-in-module
 from pglookout import logutil, pgutil
 from pglookout.pglookout import PgLookout
 from py import path as py_path  # pylint: disable=no-name-in-module
+from unittest.mock import Mock
 import os
 import pytest
 import signal
@@ -94,8 +91,8 @@ class TestPG:
             os.kill(self.pg.pid, signal.SIGQUIT)
         else:
             os.kill(self.pg.pid, signal.SIGTERM)
-        timeout = time.time() + 10
-        while (self.pg.poll() is None) and (time.time() < timeout):
+        timeout = time.monotonic() + 10
+        while (self.pg.poll() is None) and (time.monotonic() < timeout):
             time.sleep(0.1)
         if not force and self.pg.poll() is None:
             raise Exception("PG pid {} not dead".format(self.pg.pid))

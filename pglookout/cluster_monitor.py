@@ -14,6 +14,7 @@ from .pgutil import mask_connection_info
 from concurrent.futures import as_completed, ThreadPoolExecutor
 from email.utils import parsedate
 from psycopg2.extras import RealDictCursor
+from queue import Empty
 from threading import Thread
 import datetime
 import errno
@@ -23,20 +24,15 @@ import requests
 import select
 import time
 
-try:
-    from queue import Empty  # pylint: disable=import-error
-except ImportError:
-    from Queue import Empty  # pylint: disable=import-error
-
 
 class PglookoutTimeout(Exception):
     pass
 
 
 def wait_select(conn, timeout=5.0):
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        time_left = end_time - time.time()
+    end_time = time.monotonic() + timeout
+    while time.monotonic() < end_time:
+        time_left = end_time - time.monotonic()
         state = conn.poll()
         try:
             if state == psycopg2.extensions.POLL_OK:
@@ -129,7 +125,7 @@ class ClusterMonitor(Thread):
         return result
 
     def fetch_observer_state(self, instance, uri):
-        start_time = time.time()
+        start_time = time.monotonic()
         result = self._fetch_observer_state(instance, uri)
         if result:
             if instance in self.observer_state:
@@ -137,7 +133,7 @@ class ClusterMonitor(Thread):
             else:
                 self.observer_state[instance] = result
         self.log.debug("Observer: %r state was: %r, took: %.4fs to fetch",
-                       instance, result, time.time() - start_time)
+                       instance, result, time.monotonic() - start_time)
 
     def connect_to_cluster_nodes_and_cleanup_old_nodes(self):
         leftover_conns = set(self.db_conns) - set(self.config.get("remote_conns", {}))
@@ -228,10 +224,10 @@ class ClusterMonitor(Thread):
         return result
 
     def standby_status_query(self, instance, db_conn):
-        start_time = time.time()
+        start_time = time.monotonic()
         result = self._standby_status_query(instance, db_conn)
         self.log.debug("DB state gotten from: %r was: %r, took: %.4fs to fetch",
-                       instance, result, time.time() - start_time)
+                       instance, result, time.monotonic() - start_time)
         if instance in self.cluster_state:
             self.cluster_state[instance].update(result)
         else:
@@ -239,7 +235,7 @@ class ClusterMonitor(Thread):
 
         # record the first time we saw replication happen from the master
         if result.get("pg_last_xlog_receive_location"):
-            result.setdefault("replication_start_time", time.time())
+            result.setdefault("replication_start_time", time.monotonic())
 
         # maintain lowest seen lag in seconds in the state
         min_lag = self.cluster_state[instance].get("min_replication_time_lag")

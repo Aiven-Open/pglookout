@@ -31,7 +31,7 @@ provide enough replication information to support pglookout.
 
 pglookout has been developed and tested on modern Linux x86-64 systems, but
 should work on other platforms that provide the required modules.  pglookout is
-implemented in Python and works with CPython versions 2.7 and 3.3 or
+implemented in Python and works with CPython versions 3.4 or
 newer.  pglookout depends on the Requests_ and Psycopg2_ Python modules.
 
 .. _`Requests`: http://www.python-requests.org/en/latest/
@@ -87,7 +87,7 @@ and eventually after the setup section, you can just run::
 
 Python/Other::
 
-  easy_install dist/pglookout-1.4.0-py2.7.egg
+  easy_install dist/pglookout-1.4.0-py3.4.egg
 
 On systems without ``systemd`` it is recommended that you run ``pglookout``
 under Supervisor_ or other similar process control system.

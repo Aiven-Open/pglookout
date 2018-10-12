@@ -8,7 +8,6 @@ This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
 
-from __future__ import print_function
 from . import logutil, statsd, version
 from .cluster_monitor import ClusterMonitor
 from .common import convert_xlog_location_to_offset, parse_iso_datetime, get_iso_timestamp
@@ -16,6 +15,7 @@ from .pgutil import (
     create_connection_string, get_connection_info, get_connection_info_from_config_line)
 from .webserver import WebServer
 from psycopg2.extensions import adapt
+from queue import Queue
 import argparse
 import copy
 import datetime
@@ -28,11 +28,6 @@ import socket
 import subprocess
 import sys
 import time
-
-try:
-    from queue import Queue  # pylint: disable=import-error
-except ImportError:
-    from Queue import Queue  # pylint: disable=import-error
 
 
 class PgLookout:
@@ -62,7 +57,7 @@ class PgLookout:
         self.primary_conninfo_template = None
         self.cluster_monitor = None
         self.syslog_handler = None
-        self.cluster_nodes_change_time = time.time()
+        self.cluster_nodes_change_time = time.monotonic()
         self.trigger_check_queue = Queue()
         self.load_config()
 
@@ -116,7 +111,7 @@ class PgLookout:
                                         tags=stats.get("tags"))
 
         if previous_remote_conns != self.config.get("remote_conns"):
-            self.cluster_nodes_change_time = time.time()
+            self.cluster_nodes_change_time = time.monotonic()
 
         if self.config.get("autofollow"):
             try:
@@ -158,7 +153,7 @@ class PgLookout:
 
     def write_cluster_state_to_json_file(self):
         """Periodically write a JSON state file to disk"""
-        start_time = time.time()
+        start_time = time.monotonic()
         state_file_path = self.config.get("json_state_file_path", "/tmp/pglookout_state.json")
         try:
             self.overall_state = {"db_nodes": self.cluster_state, "observer_nodes": self.observer_state,
@@ -168,10 +163,10 @@ class PgLookout:
             with open(state_file_path + ".tmp", "w") as fp:
                 fp.write(json_to_dump)
             os.rename(state_file_path + ".tmp", state_file_path)
-            self.log.debug("Wrote JSON state file to disk, took %.4fs", time.time() - start_time)
+            self.log.debug("Wrote JSON state file to disk, took %.4fs", time.monotonic() - start_time)
         except Exception as ex:  # pylint: disable=broad-except
             self.log.exception("Problem in writing JSON: %r file to disk, took %.4fs",
-                               self.overall_state, time.time() - start_time)
+                               self.overall_state, time.monotonic() - start_time)
             self.stats.unexpected_exception(ex, where="write_cluster_state_to_json_file")
 
     def create_node_map(self, cluster_state, observer_state):
@@ -259,7 +254,7 @@ class PgLookout:
         """
         replication_start_time = state.get("replication_start_time")
         min_lag = state.get("min_replication_time_lag", self.replication_lag_warning_boundary)
-        if replication_start_time and time.time() - replication_start_time > self.replication_catchup_timeout:
+        if replication_start_time and time.monotonic() - replication_start_time > self.replication_catchup_timeout:
             # we've been replicating for too long and should have caught up with the master already
             return False
         if not state.get("pg_last_xlog_receive_location"):
@@ -328,11 +323,11 @@ class PgLookout:
             self.log.warning("No master node in cluster, %r standby nodes exist, "
                              "%.2f seconds since last cluster config update, failover timeout set "
                              "to %r seconds, previous master: %r",
-                             len(standby_nodes), time.time() - self.cluster_nodes_change_time,
+                             len(standby_nodes), time.monotonic() - self.cluster_nodes_change_time,
                              self.replication_lag_failover_timeout, self.current_master)
             if self.current_master:
                 self.trigger_check_queue.put("Master is missing, ask for immediate state check")
-                if (time.time() - self.cluster_nodes_change_time) >= self.missing_master_from_config_timeout:
+                if (time.monotonic() - self.cluster_nodes_change_time) >= self.missing_master_from_config_timeout:
                     # we've seen a master at some point in time, but now it's
                     # missing, perform an immediate failover to promote one of
                     # the standbys
@@ -460,11 +455,11 @@ class PgLookout:
                 self.log.warning("Not doing a failover even though we were the node the furthest along, since we aren't "
                                  "aware of the states of enough of the other nodes")
             else:
-                start_time = time.time()
+                start_time = time.monotonic()
                 self.log.warning("We will now do a failover to ourselves since we were the instance furthest along")
                 return_code = self.execute_external_command(self.failover_command)
                 self.log.warning("Executed failover command: %r, return_code: %r, took: %.2fs",
-                                 self.failover_command, return_code, time.time() - start_time)
+                                 self.failover_command, return_code, time.monotonic() - start_time)
                 self.create_alert_file("failover_has_happened")
                 # Sleep for failover time to give the DB time to restart in promotion mode
                 # You want to use this if the failover command is not one that blocks until
@@ -503,7 +498,7 @@ class PgLookout:
         new_conn_info["host"] = master_instance_conn_info["host"]
         if "port" in master_instance_conn_info:
             new_conn_info["port"] = master_instance_conn_info["port"]
-        if new_conn_info == old_conn_info and has_recovery_target_timeline:
+        if new_conn_info == old_conn_info:
             self.log.debug("recovery.conf already contains conninfo matching %r, not updating", new_master_instance)
             return False
         # Otherwise we append the new primary_conninfo
@@ -518,13 +513,12 @@ class PgLookout:
         # Replace old recovery.conf with a fresh copy
         with open(path_to_recovery_conf + "_temp", "w") as fp:
             fp.write("\n".join(new_conf) + "\n")
-        self.log.debug("Previous recovery.conf: %s", old_conf)
-        self.log.debug("Newly written recovery.conf: %s", new_conf)
+        self.log.info("Previous recovery.conf: %r, new recovery.conf: %r", old_conf, new_conf)
         os.rename(path_to_recovery_conf + "_temp", path_to_recovery_conf)
         return True
 
     def start_following_new_master(self, new_master_instance):
-        start_time = time.time()
+        start_time = time.monotonic()
         updated_config = self.modify_recovery_conf_to_point_at_new_master(new_master_instance)
         if not updated_config:
             self.log.info("Already following master %r, no need to start following it again", new_master_instance)
@@ -532,11 +526,11 @@ class PgLookout:
         start_command = self.config.get("pg_start_command", "").split()
         stop_command = self.config.get("pg_stop_command", "").split()
         self.log.info("Starting to follow new master %r, modified recovery.conf and restarting PostgreSQL"
-                      "; pg_stop_command %r; pg_start_command %r",
+                      "; pg_start_command %r; pg_stop_command %r",
                       new_master_instance, start_command, stop_command)
         self.execute_external_command(stop_command)
         self.execute_external_command(start_command)
-        self.log.info("Started following new master %r, took: %.2fs", new_master_instance, time.time() - start_time)
+        self.log.info("Started following new master %r, took: %.2fs", new_master_instance, time.monotonic() - start_time)
 
     def execute_external_command(self, command):
         self.log.warning("Executing external command: %r", command)
