@@ -85,7 +85,7 @@ class ClusterMonitor(Thread):
         inst_info_str = "{0!r} ({1})".format(instance, mask_connection_info(dsn))
         try:
             self.log.info("Connecting to %s", inst_info_str)
-            conn = psycopg2.connect(dsn=dsn, async=True)
+            conn = psycopg2.connect(dsn=dsn, async_=True)
             wait_select(conn)
             self.log.debug("Connected to %s", inst_info_str)
         except (PglookoutTimeout, psycopg2.OperationalError) as ex:
