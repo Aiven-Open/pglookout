@@ -5,8 +5,6 @@ Url:            https://github.com/aiven/pglookout
 Summary:        PostgreSQL replication monitoring and failover daemon
 License:        ASL 2.0
 Source0:        pglookout-rpm-src.tar
-Requires(pre):  shadow-utils
-Requires:       postgresql-server, systemd
 Obsoletes:      python3-pglookout
 Requires:       python3-psycopg2, python3-requests, python3-setuptools, systemd-python3, systemd
 BuildRequires:  python3-pytest, python3-pylint
@@ -28,7 +26,6 @@ to promote a new master in case the previous one goes missing.
 python3 setup.py install --prefix=%{_prefix} --root=%{buildroot}
 sed -e "s@#!/bin/python@#!%{_bindir}/python@" -i %{buildroot}%{_bindir}/*
 %{__install} -Dm0644 pglookout.unit %{buildroot}%{_unitdir}/pglookout.service
-%{__mkdir_p} %{buildroot}%{_localstatedir}/lib/pglookout
 
 
 %check
@@ -41,7 +38,6 @@ make test PYTHON=python3
 %{_bindir}/pglookout*
 %{_unitdir}/pglookout.service
 %{python3_sitelib}/*
-%attr(0755, postgres, postgres) %{_localstatedir}/lib/pglookout
 
 
 %changelog
