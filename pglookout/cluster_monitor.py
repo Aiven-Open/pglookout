@@ -50,8 +50,8 @@ def wait_select(conn, timeout=5.0):
 
 
 class ClusterMonitor(Thread):
-    def __init__(self, config, cluster_state, observer_state, create_alert_file, trigger_check_queue,
-                 stats):
+    def __init__(self, config, cluster_state, observer_state, create_alert_file, cluster_monitor_check_queue,
+                 failover_decision_queue, stats):
         Thread.__init__(self)
         self.log = logging.getLogger("ClusterMonitor")
         self.stats = stats
@@ -61,7 +61,8 @@ class ClusterMonitor(Thread):
         self.config = config
         self.create_alert_file = create_alert_file
         self.db_conns = {}
-        self.trigger_check_queue = trigger_check_queue
+        self.cluster_monitor_check_queue = cluster_monitor_check_queue
+        self.failover_decision_queue = failover_decision_queue
         self.session = requests.Session()
         if self.config.get("syslog"):
             self.syslog_handler = logutil.set_syslog_handler(
@@ -246,7 +247,7 @@ class ClusterMonitor(Thread):
             else:
                 self.cluster_state[instance]["min_replication_time_lag"] = min(min_lag, now_lag)
 
-    def main_monitoring_loop(self):
+    def main_monitoring_loop(self, requested_check=False):
         self.connect_to_cluster_nodes_and_cleanup_old_nodes()
         thread_count = len(self.db_conns) + len(self.config.get("observers", {}))
         futures = []
@@ -258,11 +259,15 @@ class ClusterMonitor(Thread):
             for future in as_completed(futures):
                 if future.exception():
                     self.log.error("Got error: %r when checking cluster state", future.exception())
+        if requested_check:
+            self.failover_decision_queue.put("Completed requested monitoring loop")
 
     def run(self):
+        self.main_monitoring_loop()
         while self.running:
-            self.main_monitoring_loop()
+            requested_check = False
             try:
-                self.trigger_check_queue.get(timeout=self.config.get("db_poll_interval", 5.0))
+                requested_check = self.cluster_monitor_check_queue.get(timeout=self.config.get("db_poll_interval", 5.0))
             except Empty:
                 pass
+            self.main_monitoring_loop(requested_check)

@@ -15,7 +15,7 @@ from .pgutil import (
     create_connection_string, get_connection_info, get_connection_info_from_config_line)
 from .webserver import WebServer
 from psycopg2.extensions import adapt
-from queue import Queue
+from queue import Empty, Queue
 import argparse
 import copy
 import datetime
@@ -58,7 +58,8 @@ class PgLookout:
         self.cluster_monitor = None
         self.syslog_handler = None
         self.cluster_nodes_change_time = time.monotonic()
-        self.trigger_check_queue = Queue()
+        self.cluster_monitor_check_queue = Queue()
+        self.failover_decision_queue = Queue()
         self.load_config()
 
         signal.signal(signal.SIGHUP, self.load_config)
@@ -76,11 +77,13 @@ class PgLookout:
             cluster_state=self.cluster_state,
             observer_state=self.observer_state,
             create_alert_file=self.create_alert_file,
-            trigger_check_queue=self.trigger_check_queue,
-            stats=self.stats)
+            cluster_monitor_check_queue=self.cluster_monitor_check_queue,
+            failover_decision_queue=self.failover_decision_queue,
+            stats=self.stats,
+        )
         # cluster_monitor doesn't exist at the time of reading the config initially
         self.cluster_monitor.log.setLevel(self.log_level)
-        self.webserver = WebServer(self.config, self.cluster_state)
+        self.webserver = WebServer(self.config, self.cluster_state, self.cluster_monitor_check_queue)
 
         logutil.notify_systemd("READY=1")
         self.log.info("PGLookout initialized, local hostname: %r, own_db: %r, cwd: %r",
@@ -149,7 +152,7 @@ class PgLookout:
         self.replication_catchup_timeout = self.config.get("replication_catchup_timeout", 300.0)
         self.missing_master_from_config_timeout = self.config.get("missing_master_from_config_timeout", 15.0)
         self.log.debug("Loaded config: %r from: %r", self.config, self.config_path)
-        self.trigger_check_queue.put("new config came, recheck")
+        self.cluster_monitor_check_queue.put("new config came, recheck")
 
     def write_cluster_state_to_json_file(self):
         """Periodically write a JSON state file to disk"""
@@ -326,7 +329,7 @@ class PgLookout:
                              len(standby_nodes), time.monotonic() - self.cluster_nodes_change_time,
                              self.replication_lag_failover_timeout, self.current_master)
             if self.current_master:
-                self.trigger_check_queue.put("Master is missing, ask for immediate state check")
+                self.cluster_monitor_check_queue.put("Master is missing, ask for immediate state check")
                 if (time.monotonic() - self.cluster_nodes_change_time) >= self.missing_master_from_config_timeout:
                     # we've seen a master at some point in time, but now it's
                     # missing, perform an immediate failover to promote one of
@@ -570,20 +573,21 @@ class PgLookout:
 
     def main_loop(self):
         while self.running:
-            # Separate try/except so we still write the state file
-            sleep_time = 5.0
             try:
-                sleep_time = float(self.config.get("replication_state_check_interval", 5.0))
                 self.check_cluster_state()
             except Exception as ex:  # pylint: disable=broad-except
                 self.log.exception("Failed to check cluster state")
-                self.stats.unexpected_exception(ex, where="main_loop1")
+                self.stats.unexpected_exception(ex, where="main_loop_check_cluster_state")
             try:
                 self.write_cluster_state_to_json_file()
             except Exception as ex:  # pylint: disable=broad-except
                 self.log.exception("Failed to write cluster state")
-                self.stats.unexpected_exception(ex, where="main_loop2")
-            time.sleep(sleep_time)
+                self.stats.unexpected_exception(ex, where="main_loop_writer_cluster_state")
+            try:
+                self.failover_decision_queue.get(timeout=float(self.config.get("replication_state_check_interval", 5.0)))
+                self.log.info("Immediate failover check completed")
+            except Empty:
+                pass
 
     def run(self):
         self.cluster_monitor.start()

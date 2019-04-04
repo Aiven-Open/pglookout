@@ -17,14 +17,16 @@ from threading import Thread
 class ThreadedWebServer(ThreadingMixIn, HTTPServer):
     cluster_state = None
     log = None
+    cluster_monitor_check_queue = None
     allow_reuse_address = True
 
 
 class WebServer(Thread):
-    def __init__(self, config, cluster_state):
+    def __init__(self, config, cluster_state, cluster_monitor_check_queue):
         Thread.__init__(self)
         self.config = config
         self.cluster_state = cluster_state
+        self.cluster_monitor_check_queue = cluster_monitor_check_queue
         self.log = getLogger("WebServer")
         self.address = self.config.get("http_address", '')
         self.port = self.config.get("http_port", 15000)
@@ -36,6 +38,7 @@ class WebServer(Thread):
         self.server = ThreadedWebServer((self.address, self.port), RequestHandler)
         self.server.cluster_state = self.cluster_state
         self.server.log = self.log
+        self.server.cluster_monitor_check_queue = self.cluster_monitor_check_queue
         self.server.serve_forever()
 
     def close(self):
@@ -55,5 +58,16 @@ class RequestHandler(SimpleHTTPRequestHandler):
             self.send_header('Content-length', len(response))
             self.end_headers()
             self.wfile.write(response)
+        else:
+            self.send_response(404)
+
+    def do_POST(self):
+        self.server.log.debug("Got request: %r", self.path)
+        if self.path.startswith("/check"):
+            self.server.cluster_monitor_check_queue.put("request from webserver")
+            self.server.log.info("Immediate status check requested")
+            self.send_response(204)
+            self.send_header('Content-length', 0)
+            self.end_headers()
         else:
             self.send_response(404)
