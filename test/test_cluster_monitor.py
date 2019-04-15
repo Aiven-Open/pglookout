@@ -44,19 +44,22 @@ def test_main_loop(db):
     def create_alert_file(arg):
         raise Exception(arg)
 
-    trigger_check_queue = Queue()
-    trigger_check_queue.put("test entry so we don't wait five seconds to get one")
+    cluster_monitor_check_queue = Queue()
+    failover_decision_queue = Queue()
 
     cm = ClusterMonitor(
         config=config,
         cluster_state=cluster_state,
         observer_state=observer_state,
         create_alert_file=create_alert_file,
-        trigger_check_queue=trigger_check_queue,
+        cluster_monitor_check_queue=cluster_monitor_check_queue,
+        failover_decision_queue=failover_decision_queue,
         stats=statsd.StatsClient(host=None),
     )
-    cm.main_monitoring_loop()
+    cm.main_monitoring_loop(requested_check=True)
 
     assert len(cm.cluster_state) == 2
     assert "test1db" in cm.cluster_state
     assert "test2db" in cm.cluster_state
+
+    assert failover_decision_queue.get(timeout=5) == "Completed requested monitoring loop"
