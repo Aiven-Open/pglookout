@@ -12,6 +12,7 @@ from pglookout.pgutil import get_connection_info, get_connection_info_from_confi
 import datetime
 import json
 import os
+import time
 
 
 def test_connect_to_cluster_nodes_and_cleanup_old_nodes(pgl):
@@ -121,6 +122,41 @@ def test_check_cluster_do_failover_one_slave(pgl):
     pgl.own_db = "own_db"
     pgl.execute_external_command.return_value = 0
     pgl.replication_lag_over_warning_limit = False
+    pgl.check_cluster_state()
+    assert pgl.execute_external_command.call_count == 1
+    assert pgl.replication_lag_over_warning_limit is False
+
+
+def test_check_cluster_master_gone_one_slave_one_observer(pgl):
+    _add_db_to_cluster_state(pgl, "old_master", pg_is_in_recovery=False, connection=False,
+                             db_time=datetime.datetime(year=2014, month=1, day=1))
+
+    _add_db_to_cluster_state(pgl, "own_db", pg_last_xlog_receive_location="1/aaaaaaaa",
+                             pg_is_in_recovery=True, connection=True, replication_time_lag=0.0)
+    pgl.own_db = "own_db"
+    _add_to_observer_state(pgl, "observer", "old_master", pg_is_in_recovery=False, connection=False,
+                           db_time=datetime.datetime(year=2014, month=1, day=1))
+    _add_to_observer_state(pgl, "observer", "own_db", pg_last_xlog_receive_location="2/aaaaaaaa",
+                           pg_is_in_recovery=True, connection=True, replication_time_lag=0.0)
+
+    # Simulate existing master connection
+    pgl.current_master = "old_master"
+    pgl.execute_external_command.return_value = 0
+    pgl.replication_lag_over_warning_limit = False
+
+    del pgl.config["remote_conns"]["old_master"]
+    # Old master removed from config, cluster monitor would remove node from cluster state so do the same here
+    del pgl.cluster_state["old_master"]
+    pgl.cluster_nodes_change_time = time.monotonic()
+
+    # First call does not promote due to missing master because config has been updated just recently and there's
+    # by default a grace period that's waited after list of known cluster nodes changes
+    pgl.check_cluster_state()
+    assert pgl.execute_external_command.call_count == 0
+    assert pgl.replication_lag_over_warning_limit is False
+
+    # If we say that master is known to be gone promotion will happen even though config was updated recently
+    pgl.known_gone_nodes.append("old_master")
     pgl.check_cluster_state()
     assert pgl.execute_external_command.call_count == 1
     assert pgl.replication_lag_over_warning_limit is False

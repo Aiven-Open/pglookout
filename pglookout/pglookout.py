@@ -52,6 +52,7 @@ class PgLookout:
         self.own_db = None
         self.current_master = None
         self.failover_command = None
+        self.known_gone_nodes = None
         self.over_warning_limit_command = None
         self.never_promote_these_nodes = None
         self.primary_conninfo_template = None
@@ -143,6 +144,7 @@ class PgLookout:
         except ValueError:
             print("Problem setting log level %r" % self.log_level)
             self.log.exception("Problem with log_level: %r", self.log_level)
+        self.known_gone_nodes = self.config.get("known_gone_nodes", [])
         self.never_promote_these_nodes = self.config.get("never_promote_these_nodes", [])
         # we need the failover_command to be converted into subprocess [] format
         self.failover_command = self.config.get("failover_command", "").split()
@@ -330,7 +332,10 @@ class PgLookout:
                              self.replication_lag_failover_timeout, self.current_master)
             if self.current_master:
                 self.cluster_monitor_check_queue.put("Master is missing, ask for immediate state check")
-                if (time.monotonic() - self.cluster_nodes_change_time) >= self.missing_master_from_config_timeout:
+                master_known_to_be_gone = self.current_master in self.known_gone_nodes
+                now = time.monotonic()
+                config_timeout_exceeded = (now - self.cluster_nodes_change_time) >= self.missing_master_from_config_timeout
+                if master_known_to_be_gone or config_timeout_exceeded:
                     # we've seen a master at some point in time, but now it's
                     # missing, perform an immediate failover to promote one of
                     # the standbys

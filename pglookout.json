@@ -4,6 +4,7 @@
     "failover_sleep_time": 0.0,
     "http_address": "",
     "http_port": 15000,
+    "known_gone_nodes": [],
     "log_level": "DEBUG",
     "max_failover_replication_time_lag": 120.0,
     "never_promote_these_nodes": [],
