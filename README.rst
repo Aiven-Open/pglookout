@@ -288,6 +288,12 @@ over_warning_limit_command and to create a warning file.
 
 Shell command to execute in case the node has deemed itself in need of promotion
 
+``known_gone_nodes`` (default ``[]``)
+
+Lists nodes that are explicitly known to have left the cluster. If old master is
+removed in a controlled manner it should be added to this list to ensure there's
+no extra delay when making promotion decision.
+
 ``never_promote_these_nodes`` (default ``[]``)
 
 Lists the nodes that will never be considered valid for promotion. As
