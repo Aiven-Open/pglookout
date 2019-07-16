@@ -439,7 +439,7 @@ class PgLookout:
         # numbers, with the highest number being the one that should be preferred.
         furthest_along_instance = max(known_replication_positions[max(known_replication_positions)])
         self.log.warning("Node that is furthest along is: %r, all replication positions were: %r",
-                         furthest_along_instance, known_replication_positions)
+                         furthest_along_instance, sorted(known_replication_positions))
         total_observers = len(self.connected_observer_nodes) + len(self.disconnected_observer_nodes)
         # +1 in the calculation comes from the master node
         total_amount_of_nodes = len(standby_nodes) + 1 - len(self.never_promote_these_nodes) + total_observers
