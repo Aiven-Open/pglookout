@@ -197,6 +197,9 @@ class ClusterMonitor(Thread):
             self.log.warning("%s (%s) %s %s", ex.__class__.__name__, str(ex).strip(), phase, instance)
             db_conn.close()
             self.db_conns[instance] = None
+            # Return "no connection" result in case of any error. If we get an error for master server after the initial
+            # query we'd end up returning completely invalid value for master's current position
+            return result
 
         result.update(self._parse_status_query_result(f_result))
         return result
