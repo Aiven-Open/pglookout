@@ -47,8 +47,8 @@ rpm: $(generated)
 
 build-dep-fed:
 	sudo dnf -y install --best --allowerasing \
-		python3-devel pytest python3-pytest python3-pylint \
-		python3-mock python-psycopg2 python3-psycopg2 \
+		python3-devel python3-pytest python3-pylint \
+		python3-mock python3-psycopg2 \
 		python3-requests rpm-build systemd-python3 \
 		python3-flake8 python3-pytest-cov
 
