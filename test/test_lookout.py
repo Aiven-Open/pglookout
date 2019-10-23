@@ -439,6 +439,9 @@ def test_two_slave_failover_and_autofollow(pgl, tmpdir):
     pgl.config["autofollow"] = True
     pgl.primary_conninfo_template = get_connection_info(primary_conninfo)
 
+    with open(os.path.join(pg_data_dir, "PG_VERSION"), "w") as fp:
+        fp.write("11\n")
+
     pgl.check_cluster_state()
     assert pgl.current_master == "other"
 
