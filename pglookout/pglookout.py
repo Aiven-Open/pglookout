@@ -14,6 +14,7 @@ from .common import convert_xlog_location_to_offset, parse_iso_datetime, get_iso
 from .pgutil import (
     create_connection_string, get_connection_info, get_connection_info_from_config_line)
 from .webserver import WebServer
+from distutils.version import LooseVersion
 from psycopg2.extensions import adapt
 from queue import Empty, Queue
 import argparse
@@ -480,7 +481,15 @@ class PgLookout:
             self.log.warning("Nothing to do since node: %r is the furthest along", furthest_along_instance)
 
     def modify_recovery_conf_to_point_at_new_master(self, new_master_instance):
-        path_to_recovery_conf = os.path.join(self.config.get("pg_data_directory"), "recovery.conf")
+        with open(os.path.join(self.config.get("pg_data_directory"), "PG_VERSION"), "r") as fp:
+            pg_version = fp.read().strip()
+
+        if LooseVersion(pg_version) >= "12":
+            recovery_conf_filename = "postgresql.auto.conf"
+        else:
+            recovery_conf_filename = "recovery.conf"
+
+        path_to_recovery_conf = os.path.join(self.config.get("pg_data_directory"), recovery_conf_filename)
         with open(path_to_recovery_conf, "r") as fp:
             old_conf = fp.read().splitlines()
         has_recovery_target_timeline = False
@@ -521,7 +530,7 @@ class PgLookout:
         # Replace old recovery.conf with a fresh copy
         with open(path_to_recovery_conf + "_temp", "w") as fp:
             fp.write("\n".join(new_conf) + "\n")
-        self.log.info("Previous recovery.conf: %r, new recovery.conf: %r", old_conf, new_conf)
+
         os.rename(path_to_recovery_conf + "_temp", path_to_recovery_conf)
         return True
 
