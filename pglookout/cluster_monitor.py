@@ -187,12 +187,13 @@ class ClusterMonitor(Thread):
                 # With txid_current we force a new transaction to occur every poll interval to ensure there's
                 # a heartbeat for the replication lag.
                 if db_conn.server_version >= 100000:
-                    c.execute("SELECT txid_current(), pg_current_wal_lsn() AS pg_last_xlog_replay_location")
+                    c.execute("SELECT txid_current(), pg_current_wal_lsn() AS pg_last_xlog_replay_location, (SELECT COUNT(*) FROM pg_stat_replication) AS pg_master_replication_connections")
                 else:
-                    c.execute("SELECT txid_current(), pg_current_xlog_location() AS pg_last_xlog_replay_location")
+                    c.execute("SELECT txid_current(), pg_current_xlog_location() AS pg_last_xlog_replay_location, (SELECT COUNT(*) FROM pg_stat_replication) AS pg_master_replication_connections")
                 wait_select(c.connection)
                 master_result = c.fetchone()
                 f_result["pg_last_xlog_replay_location"] = master_result["pg_last_xlog_replay_location"]
+                f_result["pg_master_replication_connections"] = master_result["pg_master_replication_connections"]
         except (PglookoutTimeout, psycopg2.DatabaseError, psycopg2.InterfaceError, psycopg2.OperationalError) as ex:
             self.log.warning("%s (%s) %s %s", ex.__class__.__name__, str(ex).strip(), phase, instance)
             db_conn.close()

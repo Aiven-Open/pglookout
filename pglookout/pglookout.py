@@ -62,6 +62,9 @@ class PgLookout:
         self.cluster_nodes_change_time = time.monotonic()
         self.cluster_monitor_check_queue = Queue()
         self.failover_decision_queue = Queue()
+        self.minimum_replicating_nodes = None
+        self.too_few_replicating_nodes_command = None
+         
         self.load_config()
 
         signal.signal(signal.SIGHUP, self.load_config)
@@ -150,6 +153,8 @@ class PgLookout:
         # we need the failover_command to be converted into subprocess [] format
         self.failover_command = self.config.get("failover_command", "").split()
         self.over_warning_limit_command = self.config.get("over_warning_limit_command")
+        self.minimum_replicating_nodes = self.config.get("minimum_replicating_nodes")
+        self.too_few_replicating_nodes_command = self.config.get("too_few_replicating_nodes_command")
         self.replication_lag_warning_boundary = self.config.get("warning_replication_time_lag", 30.0)
         self.replication_lag_failover_timeout = self.config.get("max_failover_replication_time_lag", 120.0)
         self.replication_catchup_timeout = self.config.get("replication_catchup_timeout", 300.0)
@@ -317,11 +322,24 @@ class PgLookout:
                 # We are the master of this cluster, nothing to do
                 self.log.debug("We %r: %r are still the master node: %r of this cluster, nothing to do.",
                                self.own_db, own_state, master_node)
+                self.check_number_of_replicating_nodes(own_state)
                 return
             if not standby_nodes:
                 self.log.warning("No standby nodes set, master node: %r", master_node)
                 return
             self.consider_failover(own_state, master_node, standby_nodes)
+
+    def check_number_of_replicating_nodes(self, own_state):
+        if self.own_db and self.minimum_replicating_nodes and self.too_few_replicating_nodes_command:
+            if self.own_db == self.current_master:
+                number_of_standby_nodes = own_state.get('pg_master_replication_connections')
+                self.log.debug("We are master and %d nodes currently replicate from us, need at least %d", number_of_standby_nodes, self.minimum_replicating_nodes)
+                if number_of_standby_nodes < self.minimum_replicating_nodes:
+                    self.log.warning("Executing : %r", self.too_few_replicating_nodes_command)
+                    return_code = self.execute_external_command(self.too_few_replicating_nodes_command)
+                    self.log.warning("Executed too_few_replicating_nodes_command: %r, return_code: %r",
+                                     self.too_few_replicating_nodes_command, return_code)
+             
 
     def consider_failover(self, own_state, master_node, standby_nodes):
         if not master_node:

@@ -362,6 +362,18 @@ Metrics sending follows the `Telegraf spec`_.
 
 .. _`Telegraf spec`: https://github.com/influxdata/telegraf/tree/master/plugins/inputs/statsd
 
+``minimum_replicating_nodes`` (default: disabled)
+
+The minimum number of nodes the master should be replicating with.
+If the number of replicating nodes falls below this mark, then 
+too_few_replicating_nodes_command is called if defined.
+
+``too_few_replicating_nodes_command`` (default: disabled)
+
+When the number of replicating nodes on the master falls 
+below minimum_replicating_nodes, this command is called.
+Note that it will be called repeatedly as long as this condition continues.
+
 
 License
 =======
