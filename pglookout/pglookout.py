@@ -63,7 +63,9 @@ class PgLookout:
         self.cluster_monitor_check_queue = Queue()
         self.failover_decision_queue = Queue()
         self.minimum_replicating_nodes = None
+        self.too_few_nodes_change_time = time.monotonic()
         self.too_few_replicating_nodes_command = None
+        self.too_few_replicating_nodes_timeout = None
          
         self.load_config()
 
@@ -155,6 +157,7 @@ class PgLookout:
         self.over_warning_limit_command = self.config.get("over_warning_limit_command")
         self.minimum_replicating_nodes = self.config.get("minimum_replicating_nodes")
         self.too_few_replicating_nodes_command = self.config.get("too_few_replicating_nodes_command")
+        self.too_few_replicating_nodes_timeout = self.config.get("too_few_replicating_nodes_timeout", 60.0)
         self.replication_lag_warning_boundary = self.config.get("warning_replication_time_lag", 30.0)
         self.replication_lag_failover_timeout = self.config.get("max_failover_replication_time_lag", 120.0)
         self.replication_catchup_timeout = self.config.get("replication_catchup_timeout", 300.0)
@@ -302,6 +305,7 @@ class PgLookout:
         if master_instance and master_instance != self.current_master:
             self.log.info("New master node detected: old: %r new: %r: %r", self.current_master, master_instance, master_node)
             self.current_master = master_instance
+            self.too_few_nodes_change_time = time.monotonic()
             if self.own_db and self.own_db != master_instance and self.config.get("autofollow"):
                 self.start_following_new_master(master_instance)
 
@@ -331,14 +335,23 @@ class PgLookout:
 
     def check_number_of_replicating_nodes(self, own_state):
         if self.own_db and self.minimum_replicating_nodes and self.too_few_replicating_nodes_command:
-            if self.own_db == self.current_master:
+            if self.own_db == self.current_master and own_state.get('connection'):
                 number_of_standby_nodes = own_state.get('pg_master_replication_connections')
                 self.log.debug("We are master and %d nodes currently replicate from us, need at least %d", number_of_standby_nodes, self.minimum_replicating_nodes)
                 if number_of_standby_nodes < self.minimum_replicating_nodes:
-                    self.log.warning("Executing : %r", self.too_few_replicating_nodes_command)
-                    return_code = self.execute_external_command(self.too_few_replicating_nodes_command)
-                    self.log.warning("Executed too_few_replicating_nodes_command: %r, return_code: %r",
+                    now = time.monotonic()
+                    self.log.warning("Too few replicating nodes in cluster, %r standby nodes exist,  "
+                             "%r nodes needed, this has been going on for %.2f seconds, "
+                             "timeout set to %.2f seconds",
+                             number_of_standby_nodes, self.minimum_replicating_nodes, 
+                             now - self.too_few_nodes_change_time, self.too_few_replicating_nodes_timeout)
+                    if (now - self.too_few_nodes_change_time) >= self.too_few_replicating_nodes_timeout:
+                        self.log.warning("Executing : %r", self.too_few_replicating_nodes_command)
+                        return_code = self.execute_external_command(self.too_few_replicating_nodes_command)
+                        self.log.warning("Executed too_few_replicating_nodes_command: %r, return_code: %r",
                                      self.too_few_replicating_nodes_command, return_code)
+                    return
+        self.too_few_nodes_change_time = time.monotonic()
              
 
     def consider_failover(self, own_state, master_node, standby_nodes):
