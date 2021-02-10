@@ -62,6 +62,7 @@ class PgLookout:
         self.cluster_nodes_change_time = time.monotonic()
         self.cluster_monitor_check_queue = Queue()
         self.failover_decision_queue = Queue()
+        self.observer_state_newer_than = datetime.datetime.min
         self.load_config()
 
         signal.signal(signal.SIGHUP, self.load_config)
@@ -81,6 +82,7 @@ class PgLookout:
             create_alert_file=self.create_alert_file,
             cluster_monitor_check_queue=self.cluster_monitor_check_queue,
             failover_decision_queue=self.failover_decision_queue,
+            is_replication_lag_over_warning_limit=self.is_replication_lag_over_warning_limit,
             stats=self.stats,
         )
         # cluster_monitor doesn't exist at the time of reading the config initially
@@ -154,6 +156,7 @@ class PgLookout:
         self.replication_lag_failover_timeout = self.config.get("max_failover_replication_time_lag", 120.0)
         self.replication_catchup_timeout = self.config.get("replication_catchup_timeout", 300.0)
         self.missing_master_from_config_timeout = self.config.get("missing_master_from_config_timeout", 15.0)
+        self.config.setdefault("poll_observers_on_warning_only", False)
 
         if self.replication_lag_warning_boundary >= self.replication_lag_failover_timeout:
             msg = "Replication lag warning boundary (%s) is not lower than its failover timeout (%s)"
@@ -290,6 +293,30 @@ class PgLookout:
         if replication_time_lag is not None:
             self.stats.gauge("pg.replication_lag", replication_time_lag)
 
+    def is_master_observer_new_enough(self, observer_state):
+        if not self.replication_lag_over_warning_limit:
+            return True
+        if not self.current_master or self.current_master not in self.config.get("observers", {}):
+            self.log.warning("Replication lag is over warning limit, but"
+                             " current master (%s) is not configured to be polled via observers", self.current_master)
+            return True
+        db_poll_intervals = datetime.timedelta(seconds=5 * self.config.get("db_poll_interval", 5.0))
+        now = datetime.datetime.utcnow()
+        if (now - self.observer_state_newer_than) < db_poll_intervals:
+            self.log.warning("Replication lag is over warning limit, but"
+                             " not waiting for observers to be polled because 5 db_poll_intervals have passed")
+            return True
+        if self.current_master not in observer_state:
+            self.log.warning("Replication lag is over warning limit, but observer for master (%s)"
+                             " has not been polled yet", self.current_master)
+            return False
+        fetch_time = parse_iso_datetime(observer_state[self.current_master]["fetch_time"])
+        if fetch_time < self.observer_state_newer_than:
+            self.log.warning("Replication lag is over warning limit, but observer's data for"
+                             " master  is stale, older than %r", self.observer_state_newer_than)
+            return False
+        return True
+
     def check_cluster_state(self):
         master_node = None
         cluster_state = copy.deepcopy(self.cluster_state)
@@ -298,6 +325,10 @@ class PgLookout:
         if not cluster_state or len(cluster_state) != configured_node_count:
             self.log.warning("No cluster state: %r, probably still starting up, node_count: %r, configured node_count: %r",
                              cluster_state, len(cluster_state), configured_node_count)
+            return
+
+        if self.config["poll_observers_on_warning_only"] and not self.is_master_observer_new_enough(observer_state):
+            self.log.warning("observer data is not good enough, skipping check")
             return
 
         master_instance, master_node, standby_nodes = self.create_node_map(cluster_state, observer_state)
@@ -361,6 +392,9 @@ class PgLookout:
                 return
         self.check_replication_lag(own_state, standby_nodes)
 
+    def is_replication_lag_over_warning_limit(self):
+        return self.replication_lag_over_warning_limit
+
     def check_replication_lag(self, own_state, standby_nodes):
         if self.is_restoring_or_catching_up_normally(own_state):
             # do not raise alerts during catchup at restore
@@ -376,6 +410,8 @@ class PgLookout:
                              self.replication_lag_over_warning_limit)
             if not self.replication_lag_over_warning_limit:  # we just went over the boundary
                 self.replication_lag_over_warning_limit = True
+                if self.config["poll_observers_on_warning_only"]:
+                    self.observer_state_newer_than = datetime.datetime.utcnow()
                 self.create_alert_file("replication_delay_warning")
                 if self.over_warning_limit_command:
                     self.log.warning("Executing over_warning_limit_command: %r", self.over_warning_limit_command)
@@ -389,6 +425,7 @@ class PgLookout:
         elif self.replication_lag_over_warning_limit:
             self.replication_lag_over_warning_limit = False
             self.delete_alert_file("replication_delay_warning")
+            self.observer_state_newer_than = datetime.datetime.min
 
         if replication_lag >= self.replication_lag_failover_timeout:
             self.log.warning("Replication time lag has grown to: %r which is over CRITICAL boundary: %r"

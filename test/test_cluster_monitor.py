@@ -5,6 +5,7 @@ Copyright (c) 2015 Ohmu Ltd
 See LICENSE for details
 """
 
+from mock import patch
 from pglookout import statsd
 from pglookout.cluster_monitor import ClusterMonitor
 from datetime import datetime, timedelta
@@ -37,6 +38,8 @@ def test_main_loop(db):
             "test1db": db.connection_string("testuser"),
             "test2db": db.connection_string("otheruser"),
         },
+        "observers": {"local": "URL"},
+        "poll_observers_on_warning_only": True
     }
     cluster_state = {}
     observer_state = {}
@@ -55,6 +58,7 @@ def test_main_loop(db):
         cluster_monitor_check_queue=cluster_monitor_check_queue,
         failover_decision_queue=failover_decision_queue,
         stats=statsd.StatsClient(host=None),
+        is_replication_lag_over_warning_limit=lambda: False
     )
     cm.main_monitoring_loop(requested_check=True)
 
@@ -63,3 +67,17 @@ def test_main_loop(db):
     assert "test2db" in cm.cluster_state
 
     assert failover_decision_queue.get(timeout=5) == "Completed requested monitoring loop"
+
+    with patch.object(cm, "fetch_observer_state") as fetch_observer_state:
+        cm.main_monitoring_loop(requested_check=True)
+        fetch_observer_state.assert_not_called()
+
+    with patch.object(cm, "fetch_observer_state") as fetch_observer_state:
+        with patch.object(cm, "is_replication_lag_over_warning_limit", lambda: True):
+            cm.main_monitoring_loop(requested_check=True)
+            fetch_observer_state.assert_called_once_with("local", "URL")
+
+    with patch.object(cm, "fetch_observer_state") as fetch_observer_state:
+        with patch.dict(cm.config, {"poll_observers_on_warning_only": False}):
+            cm.main_monitoring_loop(requested_check=True)
+            fetch_observer_state.assert_called_once_with("local", "URL")

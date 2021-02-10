@@ -236,6 +236,11 @@ pglookout observer processes.  Observers are processes that don't take any
 actions, but simply give a third party viewpoint on the state of the
 cluster.  Useful especially during net splits.
 
+``poll_observers_on_warning_only`` (default ``False``)
+
+this allows observers to be polled only when replication lag is over
+``warning_replication_time_lag``
+
 ``http_address`` (default ``""``)
 
 HTTP webserver address, by default pglookout binds to all interfaces.
