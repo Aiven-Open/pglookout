@@ -223,8 +223,8 @@ class PgLookout:
                             self.log.debug("Observer: %r sees %r as master, we see: %r, same_master: %r, connection: %r",
                                            observer_name, instance, self.current_master, instance == self.current_master,
                                            db_state.get('connection'))
-                            if observer_fetch_time >= own_fetch_time and instance != self.own_db:
-                                if connected:
+                            if self.within_dbpoll_time(observer_fetch_time, own_fetch_time) and instance != self.own_db:
+                                if connected or db_state["connection"]:
                                     connected_master_nodes[instance] = db_state
                                 else:
                                     disconnected_master_nodes[instance] = db_state
@@ -584,6 +584,9 @@ class PgLookout:
         except Exception as ex:  # pylint: disable=broad-except
             self.log.exception("Problem unlinking: %r", filepath)
             self.stats.unexpected_exception(ex, where="delete_alert_file")
+
+    def within_dbpoll_time(self, time1, time2):
+        return abs((time1 - time2).total_seconds()) < self.config.get("db_poll_interval", 5.0)
 
     def main_loop(self):
         while self.running:
