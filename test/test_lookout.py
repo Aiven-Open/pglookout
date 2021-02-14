@@ -609,3 +609,38 @@ def test_standbys_failover_equal_replication_positions(pgl):
     pgl.own_db = "192.168.63.4"
     pgl.check_cluster_state()
     assert pgl.execute_external_command.call_count == 1
+
+
+def test_node_map_when_only_observer_sees_master(pgl):
+    cluster_state = {
+        "10.255.255.10": {
+            "connection": False,
+            "db_time": "2014-08-28T14:26:51.067084+00:00Z",
+            "fetch_time": "2014-08-28T14:26:51.066368Z",
+            "pg_is_in_recovery": False,
+            "pg_last_xact_replay_timestamp": "2014-08-28T14:05:43.577357+00:00Z",
+            "pg_last_xlog_receive_location": "0/9000090",
+            "pg_last_xlog_replay_location": "0/9000090",
+            "replication_time_lag": 1267.489727,
+        },
+    }
+    observer_state = {
+        "10.255.255.11": {
+            "10.255.255.10": {
+                "connection": True,
+                "db_time": "2014-08-28T14:26:47.105901+00:00Z",
+                "fetch_time": "2014-08-28T14:26:50.104849Z",
+                "pg_is_in_recovery": False,
+                "pg_last_xact_replay_timestamp": "2014-08-28T14:05:43.577357+00:00Z",
+                "pg_last_xlog_receive_location": "0/9000090",
+                "pg_last_xlog_replay_location": "0/9000090",
+                "replication_time_lag": 1263.528544,
+            },
+            "connection": True,
+            "fetch_time": "2014-08-28T14:26:51.069891Z",
+        }
+    }
+    master_instance, _, standby_nodes = pgl.create_node_map(cluster_state, observer_state)
+    assert master_instance == "10.255.255.10"
+    # because observer saw it and its fetch time is later than cluster time
+    assert master_instance in pgl.connected_master_nodes
