@@ -640,7 +640,7 @@ def test_node_map_when_only_observer_sees_master(pgl):
             "fetch_time": "2014-08-28T14:26:51.069891Z",
         }
     }
-    master_instance, _, standby_nodes = pgl.create_node_map(cluster_state, observer_state)
+    master_instance, _, _ = pgl.create_node_map(cluster_state, observer_state)
     assert master_instance == "10.255.255.10"
     # because observer saw it and its fetch time is later than cluster time
     assert master_instance in pgl.connected_master_nodes
