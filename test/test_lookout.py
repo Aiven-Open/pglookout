@@ -123,6 +123,9 @@ def test_check_cluster_do_failover_one_slave(pgl):
     pgl.execute_external_command.return_value = 0
     pgl.replication_lag_over_warning_limit = False
     pgl.check_cluster_state()
+    assert pgl.execute_external_command.call_count == 0
+    assert pgl.replication_lag_over_warning_limit is True
+    pgl.check_cluster_state()
     assert pgl.execute_external_command.call_count == 1
     assert pgl.replication_lag_over_warning_limit is False
 
@@ -176,6 +179,9 @@ def test_check_cluster_do_failover_one_slave_one_observer(pgl):
 
     pgl.execute_external_command.return_value = 0
     pgl.replication_lag_over_warning_limit = False
+    pgl.check_cluster_state()
+    assert pgl.execute_external_command.call_count == 0
+    assert pgl.replication_lag_over_warning_limit is True
     pgl.check_cluster_state()
     assert pgl.execute_external_command.call_count == 1
     assert pgl.replication_lag_over_warning_limit is False
@@ -348,9 +354,12 @@ def test_failover_master_two_slaves_one_observer_no_connection_between_slaves(pg
                            pg_is_in_recovery=True, connection=True, replication_time_lag=130.0)
     pgl.execute_external_command.return_value = 0
     pgl.check_cluster_state()
+    assert pgl.execute_external_command.call_count == 0
+    assert pgl.replication_lag_over_warning_limit is True
+    pgl.check_cluster_state()
     assert pgl.execute_external_command.call_count == 1
 
-    assert pgl.replication_lag_over_warning_limit is False  # we keep the warning on
+    assert pgl.replication_lag_over_warning_limit is False
 
 
 def test_failover_master_one_slave_one_observer_no_connections(pgl):

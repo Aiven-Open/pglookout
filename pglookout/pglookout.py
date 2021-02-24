@@ -154,6 +154,14 @@ class PgLookout:
         self.replication_lag_failover_timeout = self.config.get("max_failover_replication_time_lag", 120.0)
         self.replication_catchup_timeout = self.config.get("replication_catchup_timeout", 300.0)
         self.missing_master_from_config_timeout = self.config.get("missing_master_from_config_timeout", 15.0)
+
+        if self.replication_lag_warning_boundary >= self.replication_lag_failover_timeout:
+            msg = "Replication lag warning boundary (%s) is not lower than its failover timeout (%s)"
+            self.log.warning(msg, self.replication_lag_warning_boundary, self.replication_lag_failover_timeout)
+            if self.replication_lag_warning_boundary > self.replication_lag_failover_timeout:
+                msg = "Replication lag warning boundary set to %s"
+                self.log.warning(msg, self.replication_lag_warning_boundary)
+                self.replication_lag_warning_boundary = self.replication_lag_failover_timeout
         self.log.debug("Loaded config: %r from: %r", self.config, self.config_path)
         self.cluster_monitor_check_queue.put("new config came, recheck")
 
@@ -376,6 +384,8 @@ class PgLookout:
                                      self.over_warning_limit_command, return_code)
                 else:
                     self.log.warning("No over_warning_limit_command set")
+                # force looping one more time since we just passed the warning limit
+                return
         elif self.replication_lag_over_warning_limit:
             self.replication_lag_over_warning_limit = False
             self.delete_alert_file("replication_delay_warning")
