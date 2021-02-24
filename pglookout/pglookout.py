@@ -384,6 +384,8 @@ class PgLookout:
                                      self.over_warning_limit_command, return_code)
                 else:
                     self.log.warning("No over_warning_limit_command set")
+                # force looping one more time since we just passed the warning limit
+                return
         elif self.replication_lag_over_warning_limit:
             self.replication_lag_over_warning_limit = False
             self.delete_alert_file("replication_delay_warning")
