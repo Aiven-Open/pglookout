@@ -159,9 +159,9 @@ class PgLookout:
             msg = "Replication lag warning boundary (%s) is not lower than its failover timeout (%s)"
             self.log.warning(msg, self.replication_lag_warning_boundary, self.replication_lag_failover_timeout)
             if self.replication_lag_warning_boundary > self.replication_lag_failover_timeout:
+                self.replication_lag_warning_boundary = self.replication_lag_failover_timeout
                 msg = "Replication lag warning boundary set to %s"
                 self.log.warning(msg, self.replication_lag_warning_boundary)
-                self.replication_lag_warning_boundary = self.replication_lag_failover_timeout
         self.log.debug("Loaded config: %r from: %r", self.config, self.config_path)
         self.cluster_monitor_check_queue.put("new config came, recheck")
 
