@@ -51,7 +51,7 @@ def wait_select(conn, timeout=5.0):
 
 class ClusterMonitor(Thread):
     def __init__(self, config, cluster_state, observer_state, create_alert_file, cluster_monitor_check_queue,
-                 failover_decision_queue, stats):
+                 failover_decision_queue, is_replication_lag_over_warning_limit, stats):
         Thread.__init__(self)
         self.log = logging.getLogger("ClusterMonitor")
         self.stats = stats
@@ -63,6 +63,7 @@ class ClusterMonitor(Thread):
         self.db_conns = {}
         self.cluster_monitor_check_queue = cluster_monitor_check_queue
         self.failover_decision_queue = failover_decision_queue
+        self.is_replication_lag_over_warning_limit = is_replication_lag_over_warning_limit
         self.session = requests.Session()
         if self.config.get("syslog"):
             self.syslog_handler = logutil.set_syslog_handler(
@@ -254,11 +255,13 @@ class ClusterMonitor(Thread):
         self.connect_to_cluster_nodes_and_cleanup_old_nodes()
         thread_count = len(self.db_conns) + len(self.config.get("observers", {}))
         futures = []
+        always_observers = not self.config["poll_observers_on_warning_only"]
         with ThreadPoolExecutor(max_workers=thread_count) as tex:
             for instance, db_conn in self.db_conns.items():
                 futures.append(tex.submit(self.standby_status_query, instance, db_conn))
-            for instance, uri in self.config.get("observers", {}).items():
-                futures.append(tex.submit(self.fetch_observer_state, instance, uri))
+            if always_observers or self.is_replication_lag_over_warning_limit():
+                for instance, uri in self.config.get("observers", {}).items():
+                    futures.append(tex.submit(self.fetch_observer_state, instance, uri))
             for future in as_completed(futures):
                 if future.exception():
                     self.log.error("Got error: %r when checking cluster state", future.exception())

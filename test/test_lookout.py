@@ -653,3 +653,29 @@ def test_node_map_when_only_observer_sees_master(pgl):
     assert master_instance == "10.255.255.10"
     # because observer saw it and its fetch time is later than cluster time
     assert master_instance in pgl.connected_master_nodes
+
+
+def test_poll_observers_on_warning_only(pgl):
+    pgl.config["poll_observers_on_warning_only"] = True
+    pgl.config["observers"] = {"local": "URL"}
+    pgl.own_db = "kuu"
+    _add_db_to_cluster_state(pgl, "master", pg_is_in_recovery=False, connection=True, db_time=datetime.datetime.min)
+    _add_db_to_cluster_state(pgl, "kuu", pg_last_xlog_receive_location="1/aaaaaaaa",
+                             pg_is_in_recovery=True, replication_time_lag=40.0)
+    pgl.check_cluster_state()
+    assert "master" not in pgl.disconnected_master_nodes
+    assert "master" in pgl.connected_master_nodes
+    assert pgl.execute_external_command.call_count == 0
+    assert pgl.replication_lag_over_warning_limit
+    assert pgl.observer_state_newer_than is not None
+
+    _add_db_to_cluster_state(pgl, "master", pg_is_in_recovery=False, connection=False, db_time=datetime.datetime.min)
+    _add_db_to_cluster_state(pgl, "kuu", pg_last_xlog_receive_location="1/aaaaaaaa",
+                             pg_is_in_recovery=True, replication_time_lag=140.0)
+    _add_to_observer_state(pgl, "observer", "master", pg_is_in_recovery=False,
+                           connection=False, db_time=datetime.datetime.min)
+    pgl.check_cluster_state()
+    # this check makes sure we did not skip doing checks because db_poll_inteval has
+    # pass but because observer data is available and create_node_map was called
+    assert "master" in pgl.disconnected_master_nodes
+    assert pgl.execute_external_command.call_count == 1
