@@ -6,8 +6,8 @@ Summary:        PostgreSQL replication monitoring and failover daemon
 License:        ASL 2.0
 Source0:        pglookout-rpm-src.tar
 Obsoletes:      python3-pglookout
-Requires:       python3-psycopg2, python3-requests, python3-setuptools, systemd-python3, systemd
-BuildRequires:  python3-psycopg2, python3-requests, python3-setuptools, systemd-python3, systemd
+Requires:       python3-psycopg2, python3-requests, python3-setuptools, systemd-python3, systemd, python3-ujson
+BuildRequires:  python3-psycopg2, python3-requests, python3-setuptools, systemd-python3, systemd, python3-ujson
 BuildRequires:  python3-pytest, python3-pylint
 BuildArch:      noarch
 

@@ -7,7 +7,7 @@ Copyright (c) 2014 F-Secure
 This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
-import json
+import ujson
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from logging import getLogger
 from socketserver import ThreadingMixIn
@@ -54,7 +54,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
         if self.path.startswith("/state.json"):
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
-            response = json.dumps(self.server.cluster_state, indent=4).encode("utf8")
+            response = ujson.dumps(self.server.cluster_state, indent=4).encode("utf8")
             self.send_header('Content-length', len(response))
             self.end_headers()
             self.wfile.write(response)

@@ -19,3 +19,6 @@ disable=
 [REPORTS]
 output-format=text
 reports=no
+
+[MASTER]
+extension-pkg-whitelist=ujson

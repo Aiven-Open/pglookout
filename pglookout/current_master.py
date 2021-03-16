@@ -11,7 +11,7 @@ See the file `LICENSE` for details.
 from __future__ import print_function
 from . import version
 import argparse
-import json
+import ujson
 import os
 import sys
 import time
@@ -35,13 +35,13 @@ def main(args=None):
 
     try:
         with open(arg.state, "r") as fp:
-            config = json.load(fp)
+            config = ujson.load(fp)
         state_file_path = config.get("json_state_file_path", "/tmp/pglookout_state.json")  # pylint: disable=no-member
         if time.monotonic() - os.stat(state_file_path).st_mtime > 60.0:
             # file older than one minute, pglookout probably dead, exit with minus one
             return -1
         with open(state_file_path, "r") as fp:
-            state_dict = json.load(fp)
+            state_dict = ujson.load(fp)
         current_master = state_dict['current_master']
         print(current_master)
     except:  # pylint: disable=bare-except

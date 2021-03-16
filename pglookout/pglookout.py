@@ -20,7 +20,7 @@ from queue import Empty, Queue
 import argparse
 import copy
 import datetime
-import json
+import ujson
 import logging
 import logging.handlers
 import os
@@ -106,7 +106,7 @@ class PgLookout:
         previous_remote_conns = self.config.get("remote_conns")
         try:
             with open(self.config_path) as fp:
-                self.config = json.load(fp)
+                self.config = ujson.load(fp)
         except Exception as ex:  # pylint: disable=broad-except
             self.log.exception("Invalid JSON config, exiting")
             self.stats.unexpected_exception(ex, where="load_config")
@@ -175,7 +175,7 @@ class PgLookout:
         try:
             self.overall_state = {"db_nodes": self.cluster_state, "observer_nodes": self.observer_state,
                                   "current_master": self.current_master}
-            json_to_dump = json.dumps(self.overall_state, indent=4)
+            json_to_dump = ujson.dumps(self.overall_state, indent=4)
             self.log.debug("Writing JSON state file to: %r, file_size: %r", state_file_path, len(json_to_dump))
             with open(state_file_path + ".tmp", "w") as fp:
                 fp.write(json_to_dump)
