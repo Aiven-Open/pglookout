@@ -649,6 +649,12 @@ class PgLookout:
                 self.stats.unexpected_exception(ex, where="main_loop_writer_cluster_state")
             try:
                 self.failover_decision_queue.get(timeout=float(self.config.get("replication_state_check_interval", 5.0)))
+                q = self.failover_decision_queue
+                while not q.empty():
+                    try:
+                        q.get(False)
+                    except Empty:
+                        continue
                 self.log.info("Immediate failover check completed")
             except Empty:
                 pass
