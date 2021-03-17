@@ -179,18 +179,28 @@ class ClusterMonitor(Thread):
             query = "SELECT {}".format(", ".join(fields))
             c.execute(query)
             wait_select(c.connection)
-            f_result = c.fetchone()
-            if not f_result['pg_is_in_recovery']:
+            maybe_standby_result = c.fetchone()
+            if maybe_standby_result['pg_is_in_recovery']:
+                f_result = maybe_standby_result
+            else:
+                # First try reading current WAL LSN separately as txid_current may fail in some cases
+                phase = "getting master LSN position"
+                if db_conn.server_version >= 100000:
+                    wal_lsn_column = "pg_current_wal_lsn() AS pg_last_xlog_replay_location"
+                else:
+                    wal_lsn_column = "pg_current_xlog_location() AS pg_last_xlog_replay_location"
+                c.execute("SELECT {}".format(wal_lsn_column))
+                wait_select(c.connection)
+                master_position = c.fetchone()
+                maybe_standby_result["pg_last_xlog_replay_location"] = master_position["pg_last_xlog_replay_location"]
+                f_result = maybe_standby_result
                 # This is only run on masters to create txid traffic every db_poll_interval
                 phase = "updating transaction on"
                 self.log.debug("%s %r", phase, instance)
                 # With pg_current_wal_lsn we simulate replay_location on the master
                 # With txid_current we force a new transaction to occur every poll interval to ensure there's
                 # a heartbeat for the replication lag.
-                if db_conn.server_version >= 100000:
-                    c.execute("SELECT txid_current(), pg_current_wal_lsn() AS pg_last_xlog_replay_location")
-                else:
-                    c.execute("SELECT txid_current(), pg_current_xlog_location() AS pg_last_xlog_replay_location")
+                c.execute("SELECT txid_current(), {}".format(wal_lsn_column))
                 wait_select(c.connection)
                 master_result = c.fetchone()
                 f_result["pg_last_xlog_replay_location"] = master_result["pg_last_xlog_replay_location"]
@@ -198,11 +208,9 @@ class ClusterMonitor(Thread):
             self.log.warning("%s (%s) %s %s", ex.__class__.__name__, str(ex).strip(), phase, instance)
             db_conn.close()
             self.db_conns[instance] = None
-            # Return "no connection" result in case of any error. If we get an error for master server after the initial
-            # query we'd end up returning completely invalid value for master's current position
-            return result
 
-        result.update(self._parse_status_query_result(f_result))
+        if f_result:
+            result.update(self._parse_status_query_result(f_result))
         return result
 
     @staticmethod
