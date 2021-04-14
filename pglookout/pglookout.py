@@ -156,7 +156,6 @@ class PgLookout:
         self.replication_lag_failover_timeout = self.config.get("max_failover_replication_time_lag", 120.0)
         self.replication_catchup_timeout = self.config.get("replication_catchup_timeout", 300.0)
         self.missing_master_from_config_timeout = self.config.get("missing_master_from_config_timeout", 15.0)
-        self.config.setdefault("poll_observers_on_warning_only", False)
 
         if self.replication_lag_warning_boundary >= self.replication_lag_failover_timeout:
             msg = "Replication lag warning boundary (%s) is not lower than its failover timeout (%s)"
@@ -327,7 +326,7 @@ class PgLookout:
                              cluster_state, len(cluster_state), configured_node_count)
             return
 
-        if self.config["poll_observers_on_warning_only"] and not self.is_master_observer_new_enough(observer_state):
+        if self.config.get("poll_observers_on_warning_only") and not self.is_master_observer_new_enough(observer_state):
             self.log.warning("observer data is not good enough, skipping check")
             return
 
@@ -410,7 +409,7 @@ class PgLookout:
                              self.replication_lag_over_warning_limit)
             if not self.replication_lag_over_warning_limit:  # we just went over the boundary
                 self.replication_lag_over_warning_limit = True
-                if self.config["poll_observers_on_warning_only"]:
+                if self.config.get("poll_observers_on_warning_only"):
                     self.observer_state_newer_than = datetime.datetime.utcnow()
                 self.create_alert_file("replication_delay_warning")
                 if self.over_warning_limit_command:

@@ -263,7 +263,7 @@ class ClusterMonitor(Thread):
         self.connect_to_cluster_nodes_and_cleanup_old_nodes()
         thread_count = len(self.db_conns) + len(self.config.get("observers", {}))
         futures = []
-        always_observers = not self.config["poll_observers_on_warning_only"]
+        always_observers = not self.config.get("poll_observers_on_warning_only")
         with ThreadPoolExecutor(max_workers=thread_count) as tex:
             for instance, db_conn in self.db_conns.items():
                 futures.append(tex.submit(self.standby_status_query, instance, db_conn))
