@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Execute pg_basebackup against the slave machine
+# Execute pg_basebackup against the standby machine
 # Before running this make sure that your /var/lib/pgsql/9.4/data (or equivalent)
 # is empty, and that you're sure you want to make this machine a db standby
 
