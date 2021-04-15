@@ -107,7 +107,7 @@ installation.
 
 2. Edit the local ``pg_hba.conf`` to allow access for the newly
    created account to the ``postgres`` (or other suitable database of your choice)
-   from the master, slave and possible observer nodes. While pglookout will
+   from the master, standby and possible observer nodes. While pglookout will
    only need to run a few builtin functions within the database, it is
    still recommended to setup a separate empty database for this
    use. Remember to reload the configuration with either::
@@ -116,7 +116,7 @@ installation.
 
    or by sending directly a ``SIGHUP`` to the PostgreSQL postmaster process.
 
-3. Fill in the created user account and master/slave/observer
+3. Fill in the created user account and master/standby/observer
    addresses into the configuration file ``pglookout.json`` to the
    section ``remote_conns``.
 
@@ -132,7 +132,7 @@ installation.
    You should try to run the failover script you provide with pglookout's
    user privileges to see that it does indeed work.
 
-5. Now copy the same ``pglookout.json`` configuration to the slave
+5. Now copy the same ``pglookout.json`` configuration to the standby
    and possible observer nodes but you need to edit the configuration
    on the other nodes so that the ``own_db`` configuration
    variable matches the ``remote_conns`` key of the node.

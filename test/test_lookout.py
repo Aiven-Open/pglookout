@@ -112,7 +112,7 @@ def test_check_cluster_state_warning(pgl):
     assert pgl.replication_lag_over_warning_limit is False
 
 
-def test_check_cluster_do_failover_one_slave(pgl):
+def test_check_cluster_do_failover_one_standby(pgl):
     _add_db_to_cluster_state(pgl, "old_master", pg_is_in_recovery=False, connection=False,
                              db_time=datetime.datetime(year=2014, month=1, day=1))
 
@@ -130,7 +130,7 @@ def test_check_cluster_do_failover_one_slave(pgl):
     assert pgl.replication_lag_over_warning_limit is False
 
 
-def test_check_cluster_master_gone_one_slave_one_observer(pgl):
+def test_check_cluster_master_gone_one_standby_one_observer(pgl):
     _add_db_to_cluster_state(pgl, "old_master", pg_is_in_recovery=False, connection=False,
                              db_time=datetime.datetime(year=2014, month=1, day=1))
 
@@ -165,7 +165,7 @@ def test_check_cluster_master_gone_one_slave_one_observer(pgl):
     assert pgl.replication_lag_over_warning_limit is False
 
 
-def test_check_cluster_do_failover_one_slave_one_observer(pgl):
+def test_check_cluster_do_failover_one_standby_one_observer(pgl):
     _add_db_to_cluster_state(pgl, "old_master", pg_is_in_recovery=False, connection=False,
                              db_time=datetime.datetime(year=2014, month=1, day=1))
 
@@ -219,13 +219,13 @@ def test_check_cluster_do_failover_with_a_node_which_should_never_be_promoted(pg
     assert pgl.replication_lag_over_warning_limit is True
 
 
-def test_check_cluster_do_failover_two_slaves(pgl):
+def test_check_cluster_do_failover_two_standbys(pgl):
     _add_db_to_cluster_state(pgl, "old_master", pg_is_in_recovery=False, connection=False)
 
     _add_db_to_cluster_state(pgl, "kuu", pg_last_xlog_receive_location="1/aaaaaaaa",
                              pg_is_in_recovery=True, connection=True, replication_time_lag=130.0)
     pgl.own_db = "kuu"
-    # we put the second slave _WELL_ ahead
+    # we put the second standby _WELL_ ahead
     _add_db_to_cluster_state(pgl, "puu", pg_last_xlog_receive_location="2/aaaaaaaa",
                              pg_is_in_recovery=True, connection=True, replication_time_lag=130.0)
 
@@ -236,14 +236,14 @@ def test_check_cluster_do_failover_two_slaves(pgl):
     assert pgl.replication_lag_over_warning_limit is True  # we keep the warning on
 
 
-def test_check_cluster_do_failover_two_slaves_when_the_one_ahead_can_never_be_promoted(pgl):
+def test_check_cluster_do_failover_two_standbys_when_the_one_ahead_can_never_be_promoted(pgl):
     _add_db_to_cluster_state(pgl, "old_master", pg_is_in_recovery=False, connection=False,
                              db_time=datetime.datetime(year=2014, month=1, day=1))
 
     _add_db_to_cluster_state(pgl, "kuu", pg_last_xlog_receive_location="1/aaaaaaaa",
                              pg_is_in_recovery=True, connection=True, replication_time_lag=130.0)
     pgl.own_db = "kuu"
-    # we put the second slave _WELL_ ahead
+    # we put the second standby _WELL_ ahead
     _add_db_to_cluster_state(pgl, "puu", pg_last_xlog_receive_location="2/aaaaaaaa",
                              pg_is_in_recovery=True, connection=True, replication_time_lag=130.0)
     pgl.never_promote_these_nodes = ["puu"]
@@ -281,7 +281,7 @@ def test_failover_over_replication_lag_when_still_connected_to_master(pgl):
     assert pgl.replication_lag_over_warning_limit is True  # we keep the warning on
 
 
-def test_failover_over_replication_lag_with_one_observer_one_slave_no_connections(pgl):
+def test_failover_over_replication_lag_with_one_observer_one_standby_no_connections(pgl):
     _add_db_to_cluster_state(pgl, "old_master", pg_is_in_recovery=False, connection=False)
 
     # We will make our own node to be the furthest along so we get considered for promotion
@@ -326,7 +326,7 @@ def test_failover_no_connections(pgl):
                              pg_is_in_recovery=True, connection=True, replication_time_lag=130.0)
     pgl.own_db = "kuu"
 
-    # we put the second slave _WELL_ ahead
+    # we put the second standby _WELL_ ahead
     _add_db_to_cluster_state(pgl, "puu", pg_last_xlog_receive_location="1/aaaaaaaa",
                              pg_is_in_recovery=True, connection=False, replication_time_lag=130.0)
     pgl.check_cluster_state()
@@ -334,7 +334,7 @@ def test_failover_no_connections(pgl):
     assert pgl.replication_lag_over_warning_limit is True  # we keep the warning on
 
 
-def test_failover_master_two_slaves_one_observer_no_connection_between_slaves(pgl):
+def test_failover_master_two_standbys_one_observer_no_connection_between_standbys(pgl):
     _add_db_to_cluster_state(pgl, "old_master", pg_is_in_recovery=False, connection=False,
                              db_time=datetime.datetime(year=2014, month=1, day=1))
     # We will make our own node to be the furthest along so we get considered for promotion
@@ -362,7 +362,7 @@ def test_failover_master_two_slaves_one_observer_no_connection_between_slaves(pg
     assert pgl.replication_lag_over_warning_limit is False
 
 
-def test_failover_master_one_slave_one_observer_no_connections(pgl):
+def test_failover_master_one_standby_one_observer_no_connections(pgl):
     pgl.own_db = "own"
 
     # Add observer state
@@ -414,7 +414,7 @@ def test_find_current_master(pgl):
     assert pgl.current_master == "master"
 
 
-def test_two_slave_failover_and_autofollow(pgl, tmpdir):
+def test_two_standby_failover_and_autofollow(pgl, tmpdir):
     _add_db_to_cluster_state(pgl, "old_master", pg_is_in_recovery=False, connection=False,
                              fetch_time=datetime.datetime(year=2014, month=1, day=1))
     # We will make our own node to be the furthest from master so we don't get considered for promotion
