@@ -22,7 +22,7 @@ PG_VERSIONS = ["13", "12", "11", "10", "9.6", "9.5", "9.4", "9.3", "9.2"]
 logutil.configure_logging()
 
 
-@pytest.yield_fixture
+@pytest.fixture
 def pgl():
     pgl_ = PgLookout("pglookout.json")
     pgl_.config["remote_conns"] = {}
@@ -75,7 +75,7 @@ class TestPG:
         subprocess.check_call(argv)
 
     def run_pg(self):
-        self.pg = subprocess.Popen([
+        self.pg = subprocess.Popen([  # pylint: disable=consider-using-with
             os.path.join(self.pgbin, "postgres"),
             "-D", self.pgdata, "-k", self.pgdata,
             "-p", "5432", "-c", "listen_addresses=",
@@ -99,7 +99,7 @@ class TestPG:
 
 
 # NOTE: cannot use 'tmpdir' fixture here, it only works in 'function' scope
-@pytest.yield_fixture(scope="session")
+@pytest.fixture(scope="session")
 def db():
     tmpdir_obj = py_path.local(tempfile.mkdtemp(prefix="pglookout_dbtest_"))
     tmpdir = str(tmpdir_obj)
