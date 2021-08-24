@@ -75,7 +75,7 @@ class TestPG:
         subprocess.check_call(argv)
 
     def run_pg(self):
-        self.pg = subprocess.Popen([  # pylint: disable=consider-using-with
+        self.pg = subprocess.Popen([  # pylint: disable=bad-option-value,consider-using-with
             os.path.join(self.pgbin, "postgres"),
             "-D", self.pgdata, "-k", self.pgdata,
             "-p", "5432", "-c", "listen_addresses=",
