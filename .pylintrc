@@ -14,7 +14,8 @@ disable=
     too-many-public-methods,
     too-many-statements,
     ungrouped-imports,
-    wrong-import-order
+    wrong-import-order,
+    unspecified-encoding
 
 [REPORTS]
 output-format=text
