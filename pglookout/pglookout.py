@@ -469,8 +469,14 @@ class PgLookout:
         return False
 
     def do_failover_decision(self, own_state, standby_nodes):
-        if self.connected_master_nodes or self._been_in_contact_with_master_within_failover_timeout():
+        if self.connected_master_nodes:
             self.log.warning("We still have some connected masters: %r, not failing over", self.connected_master_nodes)
+            return
+        if self._been_in_contact_with_master_within_failover_timeout():
+            self.log.warning(
+                "No connected master nodes, but last contact was still within failover timeout (%ss), not failing over",
+                self.replication_lag_failover_timeout,
+            )
             return
 
         known_replication_positions = self.get_replication_positions(standby_nodes)
