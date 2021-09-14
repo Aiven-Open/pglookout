@@ -109,8 +109,8 @@ class ClusterMonitor(Thread):
 
     def _fetch_observer_state(self, instance, uri):
         result = {"fetch_time": get_iso_timestamp(), "connection": True}
+        fetch_uri = uri + "/state.json"
         try:
-            fetch_uri = uri + "/state.json"
             response = self.session.get(fetch_uri, timeout=5.0)
 
             # check time difference for large skews
@@ -162,8 +162,8 @@ class ClusterMonitor(Thread):
             db_conn = self._connect_to_db(instance, self.config["remote_conns"].get(instance))
             if not db_conn:
                 return result
+        phase = "querying status from"
         try:
-            phase = "querying status from"
             self.log.debug("%s %r", phase, instance)
             c = db_conn.cursor(cursor_factory=RealDictCursor)
             if db_conn.server_version >= 100000:

@@ -34,7 +34,8 @@ import time
 class PgLookout:
     def __init__(self, config_path):
         self.log = logging.getLogger("pglookout")
-        self.stats = None
+        # dummy to make sure we never get an AttributeError -> gets overwritten after the first config loading
+        self.stats = statsd.StatsClient(host=None)
         self.running = True
         self.replication_lag_over_warning_limit = False
 
@@ -172,9 +173,9 @@ class PgLookout:
         """
         start_time = time.monotonic()
         state_file_path = self.config.get("json_state_file_path", "/tmp/pglookout_state.json")
+        overall_state = {"db_nodes": self.cluster_state, "observer_nodes": self.observer_state,
+                         "current_master": self.current_master}
         try:
-            overall_state = {"db_nodes": self.cluster_state, "observer_nodes": self.observer_state,
-                                  "current_master": self.current_master}
             json_to_dump = json.dumps(overall_state, indent=4)
             self.log.debug("Writing JSON state file to: %r, file_size: %r", state_file_path, len(json_to_dump))
             with open(state_file_path + ".tmp", "w") as fp:
@@ -628,12 +629,12 @@ class PgLookout:
             with open(filepath, "w") as fp:
                 fp.write("alert")
         except Exception as ex:  # pylint: disable=broad-except
-            self.log.exception("Problem writing alert file: %r", filepath)
+            self.log.exception("Problem writing alert file: %r", filename)
             self.stats.unexpected_exception(ex, where="create_alert_file")
 
     def delete_alert_file(self, filename):
+        filepath = os.path.join(self.config.get("alert_file_dir", os.getcwd()), filename)
         try:
-            filepath = os.path.join(self.config.get("alert_file_dir", os.getcwd()), filename)
             if os.path.exists(filepath):
                 self.log.debug("Deleting alert file: %r", filepath)
                 os.unlink(filepath)
