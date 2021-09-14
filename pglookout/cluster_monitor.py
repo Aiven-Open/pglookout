@@ -52,6 +52,12 @@ def wait_select(conn, timeout=5.0):
 class ClusterMonitor(Thread):
     def __init__(self, config, cluster_state, observer_state, create_alert_file, cluster_monitor_check_queue,
                  failover_decision_queue, is_replication_lag_over_warning_limit, stats):
+        """Thread which collects cluster state.
+
+        Basically a loop which tries to connect to each cluster member and
+        to external observers for status information. The information is collected
+        in the cluster_state/observer_state dictionaries, which are shared with the main thread.
+        """
         Thread.__init__(self)
         self.log = logging.getLogger("ClusterMonitor")
         self.stats = stats

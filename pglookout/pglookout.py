@@ -165,7 +165,11 @@ class PgLookout:
         self.cluster_monitor_check_queue.put("new config came, recheck")
 
     def write_cluster_state_to_json_file(self):
-        """Periodically write a JSON state file to disk"""
+        """Periodically write a JSON state file to disk
+
+        Currently only used to share state with the current_master helper command, pglookout itself does
+        not rely in this file.
+        """
         start_time = time.monotonic()
         state_file_path = self.config.get("json_state_file_path", "/tmp/pglookout_state.json")
         try:
@@ -183,6 +187,9 @@ class PgLookout:
             self.stats.unexpected_exception(ex, where="write_cluster_state_to_json_file")
 
     def create_node_map(self, cluster_state, observer_state):
+        """Computes roles for each known member of cluster.
+
+        Use the information gathered in the cluster_state and observer_state to figure out the roles of each member."""
         standby_nodes, master_node, master_instance = {}, None, None
         connected_master_nodes, disconnected_master_nodes = {}, {}
         connected_observer_nodes, disconnected_observer_nodes = {}, {}
