@@ -71,9 +71,6 @@ class PgLookout:
 
         self.cluster_state = {}
         self.observer_state = {}
-        self.overall_state = {"db_nodes": self.cluster_state, "observer_nodes": self.observer_state,
-                              "current_master": self.current_master,
-                              "replication_lag_over_warning": self.replication_lag_over_warning_limit}
 
         self.cluster_monitor = ClusterMonitor(
             config=self.config,
@@ -172,9 +169,9 @@ class PgLookout:
         start_time = time.monotonic()
         state_file_path = self.config.get("json_state_file_path", "/tmp/pglookout_state.json")
         try:
-            self.overall_state = {"db_nodes": self.cluster_state, "observer_nodes": self.observer_state,
+            overall_state = {"db_nodes": self.cluster_state, "observer_nodes": self.observer_state,
                                   "current_master": self.current_master}
-            json_to_dump = json.dumps(self.overall_state, indent=4)
+            json_to_dump = json.dumps(overall_state, indent=4)
             self.log.debug("Writing JSON state file to: %r, file_size: %r", state_file_path, len(json_to_dump))
             with open(state_file_path + ".tmp", "w") as fp:
                 fp.write(json_to_dump)
@@ -182,7 +179,7 @@ class PgLookout:
             self.log.debug("Wrote JSON state file to disk, took %.4fs", time.monotonic() - start_time)
         except Exception as ex:  # pylint: disable=broad-except
             self.log.exception("Problem in writing JSON: %r file to disk, took %.4fs",
-                               self.overall_state, time.monotonic() - start_time)
+                               overall_state, time.monotonic() - start_time)
             self.stats.unexpected_exception(ex, where="write_cluster_state_to_json_file")
 
     def create_node_map(self, cluster_state, observer_state):
