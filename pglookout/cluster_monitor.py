@@ -148,8 +148,8 @@ class ClusterMonitor(Thread):
         for instance, connect_string in self.config.get("remote_conns", {}).items():
             self._connect_to_db(instance, dsn=connect_string)
 
-    def _standby_status_query(self, instance, db_conn):
-        """Status query that is executed on the standby node"""
+    def _query_cluster_member_state(self, instance, db_conn):
+        """Query a single cluster member for its state"""
         f_result = None
         result = {"fetch_time": get_iso_timestamp(), "connection": False}
         if not db_conn:
@@ -236,9 +236,10 @@ class ClusterMonitor(Thread):
         result.update({"db_time": get_iso_timestamp(result["db_time"]), "connection": True})
         return result
 
-    def standby_status_query(self, instance, db_conn):
+    def update_cluster_member_state(self, instance, db_conn):
+        """Update the cluster state entry for a single cluster member"""
         start_time = time.monotonic()
-        result = self._standby_status_query(instance, db_conn)
+        result = self._query_cluster_member_state(instance, db_conn)
         self.log.debug("DB state gotten from: %r was: %r, took: %.4fs to fetch",
                        instance, result, time.monotonic() - start_time)
         if instance in self.cluster_state:
@@ -266,7 +267,7 @@ class ClusterMonitor(Thread):
         always_observers = not self.config.get("poll_observers_on_warning_only")
         with ThreadPoolExecutor(max_workers=thread_count) as tex:
             for instance, db_conn in self.db_conns.items():
-                futures.append(tex.submit(self.standby_status_query, instance, db_conn))
+                futures.append(tex.submit(self.update_cluster_member_state, instance, db_conn))
             if always_observers or self.is_replication_lag_over_warning_limit():
                 for instance, uri in self.config.get("observers", {}).items():
                     futures.append(tex.submit(self.fetch_observer_state, instance, uri))
