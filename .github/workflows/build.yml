@@ -1,0 +1,74 @@
+name: Build pglookout
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - '**'
+  pull_request:
+
+jobs:
+
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # only use the newest version for the lint step -> as long as the other version can run it it's ok
+        python-version: [3.9]
+
+    steps:
+
+      - id: checkout-code
+        uses: actions/checkout@v2
+
+      - id: prepare-python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - id: dependencies
+        run: |
+          pip install -e .
+          pip install --upgrade pylint flake8 pytest mock
+
+      - id: pylint
+        run: make pylint
+
+      - id: flake8
+        run: make flake8
+
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      max-parallel: 4
+      matrix:
+        python-version: [3.6, 3.7, 3.8, 3.9]
+        pg-version: [9.6, 10, 11, 12, 13]
+
+    steps:
+      - id: checkout-code
+        uses: actions/checkout@v2
+
+      - id: prepare-python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - id: dependencies
+        run: |
+          # Setup the Postgres repositories
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update
+          # Setup build deps
+          sudo apt-get install -y libsnappy-dev
+          sudo apt-get install -y postgresql-${{ matrix.pg-version }}
+          # Setup common python dependencies
+          python -m pip install --upgrade pip
+          pip install --upgrade pytest mock
+          pip install -e .
+
+      - id: unittest
+        run: make unittest

@@ -50,24 +50,26 @@ class WebServer(Thread):
 
 class RequestHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
+        assert isinstance(self.server, ThreadedWebServer), f"server: {self.server!r}"
         self.server.log.debug("Got request: %r", self.path)
         if self.path.startswith("/state.json"):
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             response = json.dumps(self.server.cluster_state, indent=4).encode("utf8")
-            self.send_header('Content-length', len(response))
+            self.send_header('Content-length', str(len(response)))
             self.end_headers()
             self.wfile.write(response)
         else:
             self.send_response(404)
 
     def do_POST(self):
+        assert isinstance(self.server, ThreadedWebServer), f"server: {self.server!r}"
         self.server.log.debug("Got request: %r", self.path)
         if self.path.startswith("/check"):
             self.server.cluster_monitor_check_queue.put("request from webserver")
             self.server.log.info("Immediate status check requested")
             self.send_response(204)
-            self.send_header('Content-length', 0)
+            self.send_header('Content-length', str(0))
             self.end_headers()
         else:
             self.send_response(404)

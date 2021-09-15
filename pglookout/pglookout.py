@@ -34,7 +34,8 @@ import time
 class PgLookout:
     def __init__(self, config_path):
         self.log = logging.getLogger("pglookout")
-        self.stats = None
+        # dummy to make sure we never get an AttributeError -> gets overwritten after the first config loading
+        self.stats = statsd.StatsClient(host=None)
         self.running = True
         self.replication_lag_over_warning_limit = False
 
@@ -71,9 +72,6 @@ class PgLookout:
 
         self.cluster_state = {}
         self.observer_state = {}
-        self.overall_state = {"db_nodes": self.cluster_state, "observer_nodes": self.observer_state,
-                              "current_master": self.current_master,
-                              "replication_lag_over_warning": self.replication_lag_over_warning_limit}
 
         self.cluster_monitor = ClusterMonitor(
             config=self.config,
@@ -168,13 +166,17 @@ class PgLookout:
         self.cluster_monitor_check_queue.put("new config came, recheck")
 
     def write_cluster_state_to_json_file(self):
-        """Periodically write a JSON state file to disk"""
+        """Periodically write a JSON state file to disk
+
+        Currently only used to share state with the current_master helper command, pglookout itself does
+        not rely in this file.
+        """
         start_time = time.monotonic()
         state_file_path = self.config.get("json_state_file_path", "/tmp/pglookout_state.json")
+        overall_state = {"db_nodes": self.cluster_state, "observer_nodes": self.observer_state,
+                         "current_master": self.current_master}
         try:
-            self.overall_state = {"db_nodes": self.cluster_state, "observer_nodes": self.observer_state,
-                                  "current_master": self.current_master}
-            json_to_dump = json.dumps(self.overall_state, indent=4)
+            json_to_dump = json.dumps(overall_state, indent=4)
             self.log.debug("Writing JSON state file to: %r, file_size: %r", state_file_path, len(json_to_dump))
             with open(state_file_path + ".tmp", "w") as fp:
                 fp.write(json_to_dump)
@@ -182,10 +184,13 @@ class PgLookout:
             self.log.debug("Wrote JSON state file to disk, took %.4fs", time.monotonic() - start_time)
         except Exception as ex:  # pylint: disable=broad-except
             self.log.exception("Problem in writing JSON: %r file to disk, took %.4fs",
-                               self.overall_state, time.monotonic() - start_time)
+                               overall_state, time.monotonic() - start_time)
             self.stats.unexpected_exception(ex, where="write_cluster_state_to_json_file")
 
     def create_node_map(self, cluster_state, observer_state):
+        """Computes roles for each known member of cluster.
+
+        Use the information gathered in the cluster_state and observer_state to figure out the roles of each member."""
         standby_nodes, master_node, master_instance = {}, None, None
         connected_master_nodes, disconnected_master_nodes = {}, {}
         connected_observer_nodes, disconnected_observer_nodes = {}, {}
@@ -469,8 +474,14 @@ class PgLookout:
         return False
 
     def do_failover_decision(self, own_state, standby_nodes):
-        if self.connected_master_nodes or self._been_in_contact_with_master_within_failover_timeout():
+        if self.connected_master_nodes:
             self.log.warning("We still have some connected masters: %r, not failing over", self.connected_master_nodes)
+            return
+        if self._been_in_contact_with_master_within_failover_timeout():
+            self.log.warning(
+                "No connected master nodes, but last contact was still within failover timeout (%ss), not failing over",
+                self.replication_lag_failover_timeout,
+            )
             return
 
         known_replication_positions = self.get_replication_positions(standby_nodes)
@@ -618,12 +629,12 @@ class PgLookout:
             with open(filepath, "w") as fp:
                 fp.write("alert")
         except Exception as ex:  # pylint: disable=broad-except
-            self.log.exception("Problem writing alert file: %r", filepath)
+            self.log.exception("Problem writing alert file: %r", filename)
             self.stats.unexpected_exception(ex, where="create_alert_file")
 
     def delete_alert_file(self, filename):
+        filepath = os.path.join(self.config.get("alert_file_dir", os.getcwd()), filename)
         try:
-            filepath = os.path.join(self.config.get("alert_file_dir", os.getcwd()), filename)
             if os.path.exists(filepath):
                 self.log.debug("Deleting alert file: %r", filepath)
                 os.unlink(filepath)

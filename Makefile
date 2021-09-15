@@ -3,7 +3,6 @@ long_ver = $(shell git describe --long 2>/dev/null || echo $(short_ver)-0-unknow
 generated = pglookout/version.py
 
 PYTHON ?= python3
-PYLINT=$(shell which pylint 2> /dev/null | which pylint-3)
 PYLINT_DIRS = pglookout/ test/
 
 all: $(generated)
@@ -21,7 +20,7 @@ flake8: $(generated)
 	$(PYTHON) -m flake8 --ignore E722 --max-line-len=125 $(PYLINT_DIRS)
 
 pylint: $(generated)
-	$(PYLINT) --rcfile .pylintrc $(PYLINT_DIRS)
+	$(PYTHON) -m pylint --rcfile .pylintrc $(PYLINT_DIRS)
 
 coverage:
 	$(PYTHON) -m pytest $(PYTEST_ARG) --cov-report term-missing --cov pglookout test/
