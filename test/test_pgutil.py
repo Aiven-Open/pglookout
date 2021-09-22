@@ -29,7 +29,10 @@ def test_connection_info():
     assert get_connection_info(ci) == get_connection_info(url)
 
     basic_cstr = "host=localhost user=os"
-    assert create_connection_string(get_connection_info(basic_cstr)) == "host='localhost' user='os'"
+    assert create_connection_string(get_connection_info(basic_cstr)) == "host=localhost user=os"
+
+    complex_cstr = "host=localhost user='marcel o\\'bri=an'"
+    assert create_connection_string(get_connection_info(complex_cstr)) == "host=localhost user='marcel o\\'bri=an'"
 
     assert get_connection_info("foo=bar bar='\\'x'") == {"foo": "bar", "bar": "'x"}
 

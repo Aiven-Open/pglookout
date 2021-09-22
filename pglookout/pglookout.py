@@ -143,7 +143,7 @@ class PgLookout:
             if self.cluster_monitor:
                 self.cluster_monitor.log.setLevel(self.log_level)
         except ValueError:
-            print("Problem setting log level %r" % self.log_level)
+            print(f"Problem setting log level {self.log_level!r}")
             self.log.exception("Problem with log_level: %r", self.log_level)
         self.known_gone_nodes = self.config.get("known_gone_nodes", [])
         self.never_promote_these_nodes = self.config.get("never_promote_these_nodes", [])
@@ -576,14 +576,17 @@ class PgLookout:
             self.log.debug("recovery.conf already contains conninfo matching %r, not updating", new_master_instance)
             return False
         # Otherwise we append the new primary_conninfo
-        new_conf.append("primary_conninfo = {0}".format(adapt(create_connection_string(new_conn_info))))
+        quoted_connection_string = adapt(create_connection_string(new_conn_info))
+        new_conf.append(f"primary_conninfo = {quoted_connection_string}")
         # The timeline of the recovery.conf will require a higher timeline target
         if not has_recovery_target_timeline:
             new_conf.append("recovery_target_timeline = 'latest'")
         # prepend our tag
-        new_conf.insert(0,
-                        "# pglookout updated primary_conninfo for instance {0} at {1}"
-                        .format(new_master_instance, get_iso_timestamp()))
+        iso_timestamp = get_iso_timestamp()
+        new_conf.insert(
+            0,
+            f"# pglookout updated primary_conninfo for instance {new_master_instance} at {iso_timestamp}",
+        )
         # Replace old recovery.conf with a fresh copy
         with open(path_to_recovery_conf + "_temp", "w") as fp:
             fp.write("\n".join(new_conf) + "\n")
@@ -688,7 +691,7 @@ def main(args=None):
     arg = parser.parse_args(args)
 
     if not os.path.exists(arg.config):
-        print("pglookout: {!r} doesn't exist".format(arg.config))
+        print(f"pglookout: {arg.config!r} doesn't exist")
         return 1
 
     logutil.configure_logging()

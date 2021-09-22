@@ -6,19 +6,19 @@ Copyright (c) 2015 Ohmu Ltd
 See LICENSE for details
 """
 from urllib.parse import urlparse, parse_qs  # pylint: disable=no-name-in-module, import-error
+import psycopg2.extensions
 
 
 def create_connection_string(connection_info):
-    return " ".join("{}='{}'".format(k, str(v).replace("'", "\\'"))
-                    for k, v in sorted(connection_info.items()))
+    return psycopg2.extensions.make_dsn(**connection_info)
 
 
 def mask_connection_info(info):
     masked_info = get_connection_info(info)
     password = masked_info.pop("password", None)
-    return "{0}; {1} password".format(
-        create_connection_string(masked_info),
-        "no" if password is None else "hidden")
+    connection_string = create_connection_string(masked_info)
+    message = "no password" if password is None else "hidden password"
+    return f"{connection_string}; {message}"
 
 
 def get_connection_info_from_config_line(line):
@@ -68,7 +68,7 @@ def parse_connection_string_libpq(connection_string):
         if not connection_string:
             break
         if "=" not in connection_string:
-            raise ValueError("expecting key=value format in connection_string fragment {!r}".format(connection_string))
+            raise ValueError(f"expecting key=value format in connection_string fragment {connection_string!r}")
         key, rem = connection_string.split("=", 1)
         if rem.startswith("'"):
             asis, value = False, ""
@@ -83,7 +83,7 @@ def parse_connection_string_libpq(connection_string):
                 else:
                     value += rem[i]
             else:
-                raise ValueError("invalid connection_string fragment {!r}".format(rem))
+                raise ValueError(f"invalid connection_string fragment {rem!r}")
             connection_string = rem[i + 1:]  # pylint: disable=undefined-loop-variable
         else:
             res = rem.split(None, 1)

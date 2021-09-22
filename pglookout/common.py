@@ -24,7 +24,7 @@ def parse_iso_datetime(value):
     if not match:
         match = ISO_BASIC_RE.match(value)
     if not match:
-        raise ValueError("Invalid ISO timestamp {0!r}".format(value))
+        raise ValueError(f"Invalid ISO timestamp {value!r}")
     parts = dict((key, int(match.group(key) or '0'))
                  for key in ('year', 'month', 'day', 'hour', 'minute', 'second', 'microsecond'))
     return datetime.datetime(tzinfo=None, **parts)
