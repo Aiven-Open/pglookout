@@ -49,7 +49,7 @@ class StatsClient:
             send_tags = self._tags.copy()
             send_tags.update(tags or {})
             for tag, tag_value in send_tags.items():
-                parts.insert(1, ",{}={}".format(tag, tag_value).encode("utf-8"))
+                parts.insert(1, f",{tag}={tag_value}".encode("utf-8"))
 
             self._socket.sendto(b"".join(parts), self._dest_addr)
         except Exception as ex:  # pylint: disable=broad-except

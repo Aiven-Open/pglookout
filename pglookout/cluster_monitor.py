@@ -42,7 +42,7 @@ def wait_select(conn, timeout=5.0):
             elif state == psycopg2.extensions.POLL_WRITE:
                 select.select([], [conn.fileno()], [], min(timeout, time_left))
             else:
-                raise psycopg2.OperationalError("bad state from poll: %s" % state)
+                raise psycopg2.OperationalError(f"bad state from poll: {state}")
         except select.error as error:
             if error.args[0] != errno.EINTR:
                 raise
@@ -86,7 +86,8 @@ class ClusterMonitor(Thread):
         if not dsn:
             self.log.warning("Can't connect to %s, dsn is %r", instance, dsn)
             return None
-        inst_info_str = "{0!r} ({1})".format(instance, mask_connection_info(dsn))
+        masked_connection_info = mask_connection_info(dsn)
+        inst_info_str = f"{instance!r} ({masked_connection_info})"
         try:
             self.log.info("Connecting to %s", inst_info_str)
             conn = psycopg2.connect(dsn=dsn, async_=True)
@@ -182,8 +183,8 @@ class ClusterMonitor(Thread):
                     "pg_last_xlog_receive_location()",
                     "pg_last_xlog_replay_location()",
                 ]
-            query = "SELECT {}".format(", ".join(fields))
-            c.execute(query)
+            joined_fields = ", ".join(fields)
+            c.execute(f"SELECT {joined_fields}")
             wait_select(c.connection)
             maybe_standby_result = c.fetchone()
             if maybe_standby_result['pg_is_in_recovery']:
@@ -195,7 +196,7 @@ class ClusterMonitor(Thread):
                     wal_lsn_column = "pg_current_wal_lsn() AS pg_last_xlog_replay_location"
                 else:
                     wal_lsn_column = "pg_current_xlog_location() AS pg_last_xlog_replay_location"
-                c.execute("SELECT {}".format(wal_lsn_column))
+                c.execute(f"SELECT {wal_lsn_column}")
                 wait_select(c.connection)
                 master_position = c.fetchone()
                 maybe_standby_result["pg_last_xlog_replay_location"] = master_position["pg_last_xlog_replay_location"]
@@ -206,7 +207,7 @@ class ClusterMonitor(Thread):
                 # With pg_current_wal_lsn we simulate replay_location on the master
                 # With txid_current we force a new transaction to occur every poll interval to ensure there's
                 # a heartbeat for the replication lag.
-                c.execute("SELECT txid_current(), {}".format(wal_lsn_column))
+                c.execute(f"SELECT txid_current(), {wal_lsn_column}")
                 wait_select(c.connection)
                 master_result = c.fetchone()
                 f_result["pg_last_xlog_replay_location"] = master_result["pg_last_xlog_replay_location"]

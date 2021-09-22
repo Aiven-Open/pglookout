@@ -30,7 +30,7 @@ def main(args=None):
     arg = parser.parse_args(args)
 
     if not os.path.exists(arg.state):
-        print("pglookout_current_master: {!r} doesn't exist".format(arg.state))
+        print(f"pglookout_current_master: {arg.state!r} doesn't exist")
         return 1
 
     try:

@@ -440,7 +440,7 @@ def test_two_standby_failover_and_autofollow(pgl, tmpdir):
         "host=old_master port=5432 "
         "sslmode=prefer sslcompression=1 krbsrvname=postgres"
     )
-    old_recovery_conf = "standby_mode = 'on'\nprimary_conninfo = '{0}'\n".format(primary_conninfo)
+    old_recovery_conf = f"standby_mode = 'on'\nprimary_conninfo = '{primary_conninfo}'\n"
     with open(os.path.join(pg_data_dir, "recovery.conf"), "w") as fp:
         fp.write(old_recovery_conf)
 

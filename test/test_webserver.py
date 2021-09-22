@@ -20,17 +20,18 @@ def test_webserver():
     cluster_state = {
         "hello": 123,
     }
-    base_url = "http://127.0.0.1:{}".format(config["http_port"])
+    http_port = config["http_port"]
+    base_url = f"http://127.0.0.1:{http_port}"
     cluster_monitor_check_queue = Queue()
 
     web = WebServer(config=config, cluster_state=cluster_state, cluster_monitor_check_queue=cluster_monitor_check_queue)
     try:
         web.start()
         time.sleep(1)
-        result = requests.get("{}/state.json".format(base_url)).json()
+        result = requests.get(f"{base_url}/state.json").json()
         assert result == cluster_state
 
-        result = requests.post("{}/check".format(base_url))
+        result = requests.post(f"{base_url}/check")
         assert result.status_code == 204
         res = cluster_monitor_check_queue.get(timeout=1.0)
         assert res == "request from webserver"
