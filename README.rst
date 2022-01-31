@@ -4,7 +4,7 @@ pglookout |BuildStatus|_
 .. |BuildStatus| image:: https://travis-ci.org/aiven/pglookout.png?branch=master
 .. _BuildStatus: https://travis-ci.org/aiven/pglookout
 
-pglookout is a PostgreSQL replication monitoring and failover daemon.
+pglookout is a PostgreSQL® replication monitoring and failover daemon.
 pglookout monitors PG database nodes and their replication status and acts
 according to that status, for example calling a predefined failover command
 to promote a new master in case the previous one goes missing.
@@ -389,6 +389,14 @@ Database`_ developers <pglookout@ohmu.fi>.
 
 Recent contributors are listed on the GitHub project page,
 https://github.com/aiven/pglookout/graphs/contributors
+
+
+Trademarks
+==========
+
+Postgres, PostgreSQL and the Slonik Logo are trademarks or registered trademarks of the PostgreSQL Community Association of Canada, and used with their permission.
+
+Debian, Fedora, Python, Telegraf are trademarks and property of their respective owners. All product and service names used in this website are for identification purposes only and do not imply endorsement.
 
 
 Contact
