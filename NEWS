@@ -1,11 +1,19 @@
+pglookout DEV
+=============
+
+* Support for PostgreSQL versions 12, 13 and 14
+* Various bug fixes and operability improvements
+* Testing and CI improvements, moving from Travis to GitHub actions
+* Switch to using primary and replica to describe server roles in most places
+
 pglookout 2.0.0 (2018-10-12)
 ============================
 
 * Support for PostgreSQL 11
 * Drop python2.7 and python3 support before 3.4 support, Python 3.4+ is
   now required for running pglookout
-* Detect if we're already following the same master even if the
-  standby's recovery.conf is lacking a recovery_target_timeline parameter.
+* Detect if we're already following the same primary even if the
+  replica's recovery.conf is lacking a recovery_target_timeline parameter.
 
 pglookout 1.5.0 (2017-10-17)
 ============================
@@ -16,7 +24,7 @@ pglookout 1.4.0 (2017-06-08)
 ============================
 
 * Fix statsd data sending bug breaking setups with observer nodes
-* To ease replication monitoring, include master node's replication
+* To ease replication monitoring, include primary node's replication
   position in the pglookout state file
 * Various bug and compatibility fixes
 
@@ -26,15 +34,15 @@ pglookout 1.3.1 (2016-05-31)
 * Support for Telegraf statsd
 * Check cluster state concurrently from all endpoints
 * Don't collect replication log metrics or issue warnings about it until we
-  have actually seen a master.  Previously pglookout could warn about
+  have actually seen a primary.  Previously pglookout could warn about
   replication lag while PostgreSQL was performing archive recovery.
 * New `primary_conninfo_template` configuration option to generate a
-  primary_conninfo for recovery.conf when we start following a (new) master.
+  primary_conninfo for recovery.conf when we start following a (new) primary.
   Previously pglookout tried to read an existing primary_conninfo and
-  replace the host part of it with the new master's address, but this may
+  replace the host part of it with the new primary's address, but this may
   not always work, for example in case there's no primary_conninfo at all.
-* Automatically promote one of the standby nodes if pglookout has never seen
-  a master for N seconds
+* Automatically promote one of the replica nodes if pglookout has never seen
+  a primary for N seconds
 * Failover now selects the node with highest identifier if multiple nodes
   have the same replication position
 * `remote_conns` object's keys no longer have functional meaning.  Remote
@@ -48,12 +56,12 @@ pglookout 1.3.1 (2016-05-31)
 pglookout 1.2.0 (2015-06-15)
 ============================
 
-* Support autofollow, where a standby starts automatically following another
-  standby that has been promoted to be the new cluster master
+* Support autofollow, where a replica starts automatically following another
+  replica that has been promoted to be the new cluster primary
 * Packaging improvements
 * Multiple bugfixes
 * unittest fixes to cope better with parallel testruns
-* Better support for completely idle PG replication enviroments
+* Better support for completely idle PG replication environments
 
 pglookout 1.1.0 (2015-02-14)
 ============================
