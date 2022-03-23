@@ -1,8 +1,5 @@
-pglookout |BuildStatus|_
-========================
-
-.. |BuildStatus| image:: https://travis-ci.org/aiven/pglookout.png?branch=master
-.. _BuildStatus: https://travis-ci.org/aiven/pglookout
+pglookout
+=========
 
 pglookout is a PostgreSQL® replication monitoring and failover daemon.
 pglookout monitors PG database nodes and their replication status and acts
