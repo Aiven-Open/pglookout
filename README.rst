@@ -4,7 +4,7 @@ pglookout
 pglookout is a PostgreSQL® replication monitoring and failover daemon.
 pglookout monitors PG database nodes and their replication status and acts
 according to that status, for example calling a predefined failover command
-to promote a new master in case the previous one goes missing.
+to promote a new primary in case the previous one goes missing.
 
 pglookout supports two different node types, ones that are installed on the
 db nodes themselves, and observer nodes that can be installed anywhere.  The
@@ -104,7 +104,7 @@ installation.
 
 2. Edit the local ``pg_hba.conf`` to allow access for the newly
    created account to the ``postgres`` (or other suitable database of your choice)
-   from the master, standby and possible observer nodes. While pglookout will
+   from the primary, replica and possible observer nodes. While pglookout will
    only need to run a few builtin functions within the database, it is
    still recommended to setup a separate empty database for this
    use. Remember to reload the configuration with either::
@@ -113,7 +113,7 @@ installation.
 
    or by sending directly a ``SIGHUP`` to the PostgreSQL postmaster process.
 
-3. Fill in the created user account and master/standby/observer
+3. Fill in the created user account and primary/replica/observer
    addresses into the configuration file ``pglookout.json`` to the
    section ``remote_conns``.
 
@@ -123,13 +123,13 @@ installation.
    in the examples. It is recommended to provide some way to provide
    STONITH (Shoot The Other Node In The Head) capability in the
    script. Other common methods of doing the failover and getting DB
-   traffic diverted to the newly promoted master are the switching of
+   traffic diverted to the newly promoted primary are the switching of
    PgBouncer (or other poolers) traffic, or changes in PL/Proxy configuration.
 
    You should try to run the failover script you provide with pglookout's
    user privileges to see that it does indeed work.
 
-5. Now copy the same ``pglookout.json`` configuration to the standby
+5. Now copy the same ``pglookout.json`` configuration to the replica
    and possible observer nodes but you need to edit the configuration
    on the other nodes so that the ``own_db`` configuration
    variable matches the ``remote_conns`` key of the node.
@@ -158,7 +158,7 @@ username/password or incorrect ``pg_hba.conf`` settings.
 
 ``multiple_master_warning``
 
-This alert file is created when multiple masters are detected in the
+This alert file is created when multiple primaries are detected in the
 same cluster.
 
 ``replication_delay_warning``
@@ -186,7 +186,7 @@ their arguments the path to the node's JSON configuration file.
 supervisord.
 
 ``pglookout_current_master`` is a helper that will simply parse the
-state file and return which node is the current master.
+state file and return which node is the current primary.
 
 While pglookout is running it may be useful to read the JSON state
 file that exists where ``json_state_file_path`` points. The JSON
@@ -199,10 +199,11 @@ Configuration keys
 
 ``autofollow`` (default ``false``)
 
-Do you want pglookout to try to start following the new master. Useful
-in scenarios where you have a master and two standbys, master dies
-and another standby is promoted. This will allow the remaining standby
-to start following the new master. Requires ``pg_data_directory``, ``pg_start_command``
+Do you want pglookout to try to start following the new primary. Useful
+in scenarios where you have a primary and two replicas, primary dies
+and another replica is promoted. This will allow the remaining replica
+to start following the new primary.
+Requires ``pg_data_directory``, ``pg_start_command``
 and ``pg_stop_command`` configuration keys to be set.
 
 ``db_poll_interval`` (default ``5.0``)
@@ -221,7 +222,7 @@ PostgreSQL connection strings or connection info objects.
 Connection string or connection info object template to use when setting a new
 primary_conninfo value for recovery.conf after a failover has happened.  Any
 provided hostname and database name in the template is ignored and they are
-replaced with a replication connection to the new master node.
+replaced with a replication connection to the new primary node.
 
 Required when ``autofollow`` is true.
 
@@ -258,12 +259,12 @@ Time to sleep after a failover command has been issued.
 ``maintenance_mode_file`` (default ``"/tmp/pglookout_maintenance_mode_file"``)
 
 If a file exists in this location, this node will not be considered
-for promotion to master.
+for promotion to primary.
 
 ``missing_master_from_config_timeout`` (default ``15``)
 
 In seconds the amount of time before we do a failover decision if a
-previously existing master has been removed from the config file and
+previously existing primary has been removed from the config file and
 we have gotten a SIGHUP.
 
 ``alert_file_dir`` (default ``os.getcwd()``)
@@ -292,15 +293,16 @@ Shell command to execute in case the node has deemed itself in need of promotion
 
 ``known_gone_nodes`` (default ``[]``)
 
-Lists nodes that are explicitly known to have left the cluster. If old master is
-removed in a controlled manner it should be added to this list to ensure there's
-no extra delay when making promotion decision.
+Lists nodes that are explicitly known to have left the cluster.  If the old
+primary is removed in a controlled manner it should be added to this list to
+ensure there's no extra delay when making promotion decision.
 
 ``never_promote_these_nodes`` (default ``[]``)
 
-Lists the nodes that will never be considered valid for promotion. As
-in if you have master m which fails and standby a and b. b is ahead but is listed
-in never_promote_these_nodes, a will be promoted.
+Lists the nodes that will never be considered valid for promotion.  As in if
+you have primary ``p`` which fails and replicas ``a`` and ```b``, even if
+``b`` is ahead but is listed in ``never_promote_these_nodes``, ``a`` will be
+promoted.
 
 ``over_warning_limit_command`` (default ``null``)
 
@@ -376,13 +378,11 @@ http://www.apache.org/licenses/LICENSE-2.0.txt
 Credits
 =======
 
-pglookout was created by Hannu Valtonen <hannu.valtonen@ohmu.fi> for
-F-Secure_ and is now maintained by `Ohmu Ltd`_ hackers and `Aiven Cloud
-Database`_ developers <pglookout@ohmu.fi>.
+pglookout was created by Hannu Valtonen & the Ohmu team for F-Secure_ and is
+now maintained by Aiven_ developers <opensource@aiven.io>.
 
 .. _`F-Secure`: https://www.f-secure.com/
-.. _`Ohmu Ltd`: https://ohmu.fi/
-.. _`Aiven Cloud Database`: https://aiven.io/
+.. _`Aiven`: https://aiven.io/
 
 Recent contributors are listed on the GitHub project page,
 https://github.com/aiven/pglookout/graphs/contributors
@@ -402,4 +402,4 @@ Contact
 Bug reports and patches are very welcome, please post them as GitHub issues
 and pull requests at https://github.com/aiven/pglookout .  Any possible
 vulnerabilities or other serious issues should be reported directly to the
-maintainers <pglookout@ohmu.fi>.
+maintainers <opensource@aiven.io>.

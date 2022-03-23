@@ -1,5 +1,5 @@
 Source: pglookout
-Maintainer: Hannu Valtonen <hannu.valtonen@aiven.io>
+Maintainer: Hannu Valtonen <opensource@aiven.io>
 Section: python
 Priority: optional
 Build-Depends: debhelper (>= 7.4.3), dh-systemd (>= 1.2.2), dh-python,
@@ -15,4 +15,4 @@ Depends: ${misc:Depends}, ${python:Depends},
 Description: pglookout is a PostgreSQL replication monitoring and failover daemon.
  pglookout monitors PG database nodes and their replication status and acts
  according to that status, for example calling a predefined failover command
- to promote a new master in case the previous one goes missing.
+ to promote a new primary in case the previous one goes missing.

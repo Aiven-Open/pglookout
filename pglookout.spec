@@ -15,7 +15,7 @@ BuildArch:      noarch
 pglookout is a PostgreSQL replication monitoring and failover daemon.
 pglookout monitors PG database nodes and their replication status and acts
 according to that status, for example calling a predefined failover command
-to promote a new master in case the previous one goes missing.
+to promote a new primary in case the previous one goes missing.
 
 
 %prep
@@ -41,12 +41,12 @@ make test PYTHON=python3
 
 
 %changelog
-* Wed Mar 25 2015 Oskari Saarenmaa <os@ohmu.fi> - 1.1.0-9
+* Wed Mar 25 2015 Oskari Saarenmaa <opensource@aiven.io> - 1.1.0-9
 * Build just a single package using Python 3 if possible, Python 2 otherwise
 
-* Fri Feb 27 2015 Oskari Saarenmaa <os@ohmu.fi> - 1.1.0
+* Fri Feb 27 2015 Oskari Saarenmaa <opensource@aiven.io> - 1.1.0
 - Refactored
 - Python 3 support
 
-* Tue Dec 16 2014 Hannu Valtonen <hannu.valtonen@ohmu.fi> - 1.0.0
+* Tue Dec 16 2014 Hannu Valtonen <opensource@aiven.io> - 1.0.0
 - Initial RPM package spec

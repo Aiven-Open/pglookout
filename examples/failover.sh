@@ -3,10 +3,10 @@
 # Usage ./failover.sh
 # You can for example edit the IP below to match your IP aliasing config
 
-# Set an IP alias that moves to the new master node
+# Set an IP alias that moves to the new primary node
 sudo ifconfig eth0:0 1.2.3.4 netmask 255.255.255.0
 
-# Promote the new master node
+# Promote the new primary node
 
 pg_ctl promote -D /var/lib/pgsql/data
 
