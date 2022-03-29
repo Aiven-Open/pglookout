@@ -67,7 +67,7 @@ jobs:
           sudo apt-get install -y postgresql-${{ matrix.pg-version }}
           # Setup common python dependencies
           python -m pip install --upgrade pip
-          pip install --upgrade pytest mock
+          pip install --upgrade pytest mock pytest-cov
           pip install -e .
 
       - id: unittest
