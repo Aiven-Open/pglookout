@@ -23,7 +23,8 @@ pylint: $(generated)
 	$(PYTHON) -m pylint --rcfile .pylintrc $(PYLINT_DIRS)
 
 coverage:
-	$(PYTHON) -m pytest $(PYTEST_ARG) --cov-report term-missing --cov pglookout test/
+	$(PYTHON) -m pytest $(PYTEST_ARG) --cov-report term-missing --cov-branch \
+		--cov-report xml:coverage.xml --cov pglookout test/
 
 clean:
 	$(RM) -r *.egg-info/ build/ dist/
