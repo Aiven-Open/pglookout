@@ -5,6 +5,7 @@ __pycache__/
 build/
 pglookout.egg-info/
 .coverage
+coverage.xml
 /pglookout/version.py
 
 .idea/
