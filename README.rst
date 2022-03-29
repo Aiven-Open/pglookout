@@ -1,5 +1,10 @@
-pglookout
-=========
+pglookout |BuildStatus| |Codecov|_
+==================================
+
+.. |BuildStatus| image:: https://github.com/aiven/pglookout/actions/workflows/build.yml/badge.svg?branch=main
+.. _BuildStatus: https://github.com/aiven/pglookout/actions
+.. |Codecov| image:: https://codecov.io/gh/aiven/pglookout/branch/main/graph/badge.svg?token=nLr7M7hvCx
+.. _Codecov: https://codecov.io/gh/aiven/pglookout
 
 pglookout is a PostgreSQL® replication monitoring and failover daemon.
 pglookout monitors PG database nodes and their replication status and acts
