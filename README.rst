@@ -28,12 +28,11 @@ viewpoint on the health of the cluster.
 Requirements
 ============
 
-pglookout can monitor PostgreSQL versions 9.1 and above.  Previous versions don't
-provide enough replication information to support pglookout.
+pglookout can monitor PostgreSQL versions 9.6 and above.
 
 pglookout has been developed and tested on modern Linux x86-64 systems, but
 should work on other platforms that provide the required modules.  pglookout is
-implemented in Python and works with CPython versions 3.5 or
+implemented in Python and works with CPython versions 3.7 or
 newer.  pglookout depends on the Requests_ and Psycopg2_ Python modules.
 
 .. _`Requests`: http://www.python-requests.org/en/latest/
