@@ -14,7 +14,7 @@ from .common import convert_xlog_location_to_offset, parse_iso_datetime, get_iso
 from .pgutil import (
     create_connection_string, get_connection_info, get_connection_info_from_config_line)
 from .webserver import WebServer
-from distutils.version import LooseVersion
+from packaging.version import parse
 from psycopg2.extensions import adapt
 from queue import Empty, Queue
 import argparse
@@ -541,7 +541,7 @@ class PgLookout:
         with open(os.path.join(self.config.get("pg_data_directory"), "PG_VERSION"), "r") as fp:
             pg_version = fp.read().strip()
 
-        if LooseVersion(pg_version) >= "12":
+        if parse(pg_version) >= parse("12"):
             recovery_conf_filename = "postgresql.auto.conf"
         else:
             recovery_conf_filename = "recovery.conf"
