@@ -12,10 +12,12 @@ from . import logutil
 from .common import get_iso_timestamp, parse_iso_datetime
 from .pgutil import mask_connection_info
 from concurrent.futures import as_completed, ThreadPoolExecutor
+from dataclasses import dataclass, asdict
 from email.utils import parsedate
 from psycopg2.extras import RealDictCursor
 from queue import Empty
 from threading import Thread
+from typing import List
 import datetime
 import errno
 import logging
@@ -27,6 +29,18 @@ import time
 
 class PglookoutTimeout(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class ReplicationSlot:
+    slot_name: str
+    plugin: str
+    slot_type: str
+    database: str
+    catalog_xmin: str
+    restart_lsn: str
+    confirmed_flush_lsn: str
+    state_data: str
 
 
 def wait_select(conn, timeout=5.0):
@@ -155,6 +169,29 @@ class ClusterMonitor(Thread):
         for instance, connect_string in self.config.get("remote_conns", {}).items():
             self._connect_to_db(instance, dsn=connect_string)
 
+    def _fetch_replication_slot_info(self, instance: str, cursor: RealDictCursor) -> List[ReplicationSlot]:
+        """Fetch logical replication slot definitions"""
+
+        self.log.debug("reading replication slot state from %r", instance)
+        cursor.execute("""SELECT
+                              slot_name,
+                              plugin,
+                              slot_type,
+                              database,
+                              catalog_xmin,
+                              restart_lsn,
+                              confirmed_flush_lsn,
+                              pg_catalog.encode(pg_catalog.pg_read_binary_file(
+                                  'pg_replslot/' || slot_name || '/state'), 'base64'
+                              ) AS state_data
+                            FROM pg_catalog.pg_replication_slots
+                            WHERE slot_type = 'logical' AND NOT temporary
+        """)
+        wait_select(cursor.connection)
+        replication_slots = [ReplicationSlot(**slot) for slot in cursor.fetchall()]
+        self.log.debug("found %d replication slot(s)", len(replication_slots))
+        return replication_slots
+
     def _query_cluster_member_state(self, instance, db_conn):
         """Query a single cluster member for its state"""
         f_result = None
@@ -201,6 +238,10 @@ class ClusterMonitor(Thread):
                 master_position = c.fetchone()
                 maybe_standby_result["pg_last_xlog_replay_location"] = master_position["pg_last_xlog_replay_location"]
                 f_result = maybe_standby_result
+
+                if db_conn.server_version >= 100000:
+                    f_result["replication_slots"] = [asdict(slot) for slot in self._fetch_replication_slot_info(instance, c)]
+
                 # This is only run on masters to create txid traffic every db_poll_interval
                 phase = "updating transaction on"
                 self.log.debug("%s %r", phase, instance)

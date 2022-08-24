@@ -16,7 +16,7 @@ import tempfile
 import time
 
 
-PG_VERSIONS = ["14", "13", "12", "11", "10", "9.6", "9.5", "9.4", "9.3", "9.2"]
+PG_VERSIONS = ["14", "13", "12", "11", "10", "9.6"]
 
 
 logutil.configure_logging()
@@ -121,7 +121,7 @@ def db():
     with open(os.path.join(pgdata, "postgresql.conf"), "a") as fp:
         fp.write(
             "max_wal_senders = 2\n"
-            "wal_level = archive\n"
+            "wal_level = logical\n"
             # disable fsync and synchronous_commit to speed up the tests a bit
             "fsync = off\n"
             "synchronous_commit = off\n"
