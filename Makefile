@@ -51,11 +51,12 @@ build-dep-fed:
 		python3-devel python3-pytest python3-pylint \
 		python3-mock python3-psycopg2 \
 		python3-requests rpm-build systemd-python3 \
-		python3-flake8 python3-pytest-cov
+		python3-flake8 python3-pytest-cov python3-packaging
 
 build-dep-deb:
 	sudo apt-get install \
 		build-essential devscripts dh-systemd \
-		python3-all python3-setuptools python3-psycopg2 python3-requests
+		python3-all python3-setuptools python3-psycopg2 python3-requests \
+		python3-packaging
 
 .PHONY: rpm
