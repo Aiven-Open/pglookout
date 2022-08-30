@@ -11,7 +11,7 @@ Homepage: https://github.com/aiven/pglookout
 Package: pglookout
 Architecture: all
 Depends: ${misc:Depends}, ${python:Depends},
- python3-psycopg2 (>= 2.4.0-1), python3-requests (>= 1.2.0-1)
+ python3-packaging, python3-psycopg2 (>= 2.4.0-1), python3-requests (>= 1.2.0-1)
 Description: pglookout is a PostgreSQL replication monitoring and failover daemon.
  pglookout monitors PG database nodes and their replication status and acts
  according to that status, for example calling a predefined failover command
