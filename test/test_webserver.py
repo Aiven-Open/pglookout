@@ -28,10 +28,10 @@ def test_webserver():
     try:
         web.start()
         time.sleep(1)
-        result = requests.get(f"{base_url}/state.json").json()
+        result = requests.get(f"{base_url}/state.json", timeout=5).json()
         assert result == cluster_state
 
-        result = requests.post(f"{base_url}/check")
+        result = requests.post(f"{base_url}/check", timeout=5)
         assert result.status_code == 204
         res = cluster_monitor_check_queue.get(timeout=1.0)
         assert res == "request from webserver"
