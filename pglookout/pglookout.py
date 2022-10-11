@@ -10,7 +10,7 @@ See the file `LICENSE` for details.
 
 from . import logutil, statsd, version
 from .cluster_monitor import ClusterMonitor
-from .common import convert_xlog_location_to_offset, parse_iso_datetime, get_iso_timestamp
+from .common import convert_xlog_location_to_offset, parse_iso_datetime, get_iso_timestamp, JsonObject
 from .pgutil import (
     create_connection_string, get_connection_info, get_connection_info_from_config_line)
 from .webserver import WebServer
@@ -72,6 +72,7 @@ class PgLookout:
 
         self.cluster_state = {}
         self.observer_state = {}
+        self.replication_slots_cache = {}
 
         self.cluster_monitor = ClusterMonitor(
             config=self.config,
@@ -82,10 +83,11 @@ class PgLookout:
             failover_decision_queue=self.failover_decision_queue,
             is_replication_lag_over_warning_limit=self.is_replication_lag_over_warning_limit,
             stats=self.stats,
+            replication_slots_cache=self.replication_slots_cache
         )
         # cluster_monitor doesn't exist at the time of reading the config initially
         self.cluster_monitor.log.setLevel(self.log_level)
-        self.webserver = WebServer(self.config, self.cluster_state, self.cluster_monitor_check_queue)
+        self.webserver = WebServer(self.config, self.cluster_state, self.cluster_monitor_check_queue, self.get_overall_state)
 
         logutil.notify_systemd("READY=1")
         self.log.info("PGLookout initialized, local hostname: %r, own_db: %r, cwd: %r",
@@ -165,6 +167,14 @@ class PgLookout:
         self.log.debug("Loaded config: %r from: %r", self.config, self.config_path)
         self.cluster_monitor_check_queue.put("new config came, recheck")
 
+    def get_overall_state(self) -> JsonObject:
+        return {
+            "db_nodes": self.cluster_state,
+            "observer_nodes": self.observer_state,
+            "current_master": self.current_master,
+            "replication_slots_cache": self.replication_slots_cache
+        }
+
     def write_cluster_state_to_json_file(self):
         """Periodically write a JSON state file to disk
 
@@ -173,8 +183,7 @@ class PgLookout:
         """
         start_time = time.monotonic()
         state_file_path = self.config.get("json_state_file_path", "/tmp/pglookout_state.json")
-        overall_state = {"db_nodes": self.cluster_state, "observer_nodes": self.observer_state,
-                         "current_master": self.current_master}
+        overall_state = self.get_overall_state()
         try:
             json_to_dump = json.dumps(overall_state, indent=4)
             self.log.debug("Writing JSON state file to: %r, file_size: %r", state_file_path, len(json_to_dump))
