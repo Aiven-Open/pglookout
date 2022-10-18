@@ -4,7 +4,6 @@ pglookout
 Copyright (c) 2015 Ohmu Ltd
 See LICENSE for details
 """
-from pglookout.common import JsonObject
 from .conftest import TestPG
 from contextlib import closing
 from datetime import datetime, timedelta
@@ -12,6 +11,7 @@ from mock import patch
 from packaging import version
 from pglookout import statsd
 from pglookout.cluster_monitor import ClusterMonitor
+from pglookout.common import JsonObject
 from psycopg2.extras import RealDictCursor
 from queue import Queue
 from typing import Callable, Optional, Tuple
@@ -48,7 +48,7 @@ def test_main_loop(db):
             "test2db": db.connection_string("otheruser"),
         },
         "observers": {"local": "URL"},
-        "poll_observers_on_warning_only": True
+        "poll_observers_on_warning_only": True,
     }
     cluster_state = {}
     observer_state = {}
@@ -68,7 +68,7 @@ def test_main_loop(db):
         failover_decision_queue=failover_decision_queue,
         stats=statsd.StatsClient(host=None),
         is_replication_lag_over_warning_limit=lambda: False,
-        replication_slots_cache={}
+        replication_slots_cache={},
     )
     cm.main_monitoring_loop(requested_check=True)
 
@@ -103,7 +103,7 @@ def test_fetch_replication_slot_info(db: TestPG) -> None:
             "test2db": db.connection_string("otheruser"),
         },
         "observers": {"local": "URL"},
-        "poll_observers_on_warning_only": True
+        "poll_observers_on_warning_only": True,
     }
     cluster_state = {}
     observer_state = {}
@@ -123,7 +123,7 @@ def test_fetch_replication_slot_info(db: TestPG) -> None:
         failover_decision_queue=failover_decision_queue,
         stats=statsd.StatsClient(host=None),
         is_replication_lag_over_warning_limit=lambda: False,
-        replication_slots_cache={}
+        replication_slots_cache={},
     )
     cm.main_monitoring_loop(requested_check=True)
 
@@ -153,9 +153,9 @@ def repl_slot1_data(slot_lsn: str) -> JsonObject:
         "restart_lsn": "0/2F0021B0",
         "confirmed_flush_lsn": slot_lsn,
         "state_data": "oRwFAcg9zQUCAAAAuAAAAHRlc3Rfc2xvdF92MwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"
-                      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdQAAAAAAAAAAAAACNHQAAsCEALwAAAAAAAAAAAAAAAOgh\n"
-                      "AC8AAAAA6CEALwAAAAAAd2FsMmpzb24AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"
-                      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdQAAAAAAAAAAAAACNHQAAsCEALwAAAAAAAAAAAAAAAOgh\n"
+        "AC8AAAAA6CEALwAAAAAAd2FsMmpzb24AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
     }
 
 
@@ -169,14 +169,14 @@ def repl_slot2_data(slot_lsn: str) -> JsonObject:
         "restart_lsn": "0/2F0021B0",
         "confirmed_flush_lsn": slot_lsn,
         "state_data": "oRwFAXYIR6MCAAAAuAAAAHRlc3Rfc2xvdF92MgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"
-                      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdQAAAAAAAAAAAAACNHQAACBkALwAAAAAAAAAAAAAAAEAZ\n"
-                      "AC8AAAAAQBkALwAAAAAAdGVzdF9kZWNvZGluZwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"
-                      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdQAAAAAAAAAAAAACNHQAACBkALwAAAAAAAAAAAAAAAEAZ\n"
+        "AC8AAAAAQBkALwAAAAAAdGVzdF9kZWNvZGluZwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
     }
 
 
 def create_query_cluster_member_state(
-        slot1_lsn: Optional[str], slot2_lsn: Optional[str], standby_lsn: str
+    slot1_lsn: Optional[str], slot2_lsn: Optional[str], standby_lsn: str
 ) -> Callable[[str, Tuple[str, bytes]], JsonObject]:
     def query_cluster_member_state(instance: str, _: Tuple[str, bytes]) -> JsonObject:
         # Master
@@ -189,7 +189,10 @@ def create_query_cluster_member_state(
                 "pg_last_xact_replay_timestamp": None,
                 "pg_last_xlog_receive_location": None,
                 "pg_last_xlog_replay_location": "1/E000548",
-                "replication_slots": [repl_slot1_data(slot1_lsn), repl_slot2_data(slot2_lsn)]
+                "replication_slots": [
+                    repl_slot1_data(slot1_lsn),
+                    repl_slot2_data(slot2_lsn),
+                ],
             }
         return {
             "fetch_time": "2022-10-13T07:11:07.087439Z",
@@ -200,8 +203,9 @@ def create_query_cluster_member_state(
             "pg_last_xlog_receive_location": standby_lsn,
             "pg_last_xlog_replay_location": "1/E000548",
             "replication_time_lag": 2.001652,
-            "min_replication_time_lag": 0.007882
+            "min_replication_time_lag": 0.007882,
         }
+
     return query_cluster_member_state
 
 
@@ -215,7 +219,7 @@ def test_update_cluster_member_state_replication_slots_cache(db: TestPG) -> None
             "test2db": db.connection_string("otheruser"),
         },
         "observers": {"local": "URL"},
-        "poll_observers_on_warning_only": True
+        "poll_observers_on_warning_only": True,
     }
     cluster_state = {}
     observer_state = {}
@@ -235,13 +239,15 @@ def test_update_cluster_member_state_replication_slots_cache(db: TestPG) -> None
         failover_decision_queue=failover_decision_queue,
         stats=statsd.StatsClient(host=None),
         is_replication_lag_over_warning_limit=lambda: False,
-        replication_slots_cache={}
+        replication_slots_cache={},
     )
 
     # Only first slot state should be added, as the second one does not have anything flushed
-    with patch.object(cm, "_query_cluster_member_state", create_query_cluster_member_state(
-        slot1_lsn="0/2F0021E8", slot2_lsn=None, standby_lsn="0/2F0021E8"
-    )):
+    with patch.object(
+        cm,
+        "_query_cluster_member_state",
+        create_query_cluster_member_state(slot1_lsn="0/2F0021E8", slot2_lsn=None, standby_lsn="0/2F0021E8"),
+    ):
         cm.main_monitoring_loop(requested_check=True)
         assert len(cm.replication_slots_cache) == 1
         assert "test_slot_v1" in cm.replication_slots_cache
@@ -249,9 +255,11 @@ def test_update_cluster_member_state_replication_slots_cache(db: TestPG) -> None
 
     # Add the same first slot state twice and the updated second slot, now we should have both, first one should not
     # be duplicated
-    with patch.object(cm, "_query_cluster_member_state", create_query_cluster_member_state(
-        slot1_lsn="0/2F0021E8", slot2_lsn="0/2F001940", standby_lsn="0/2F0021E8"
-    )):
+    with patch.object(
+        cm,
+        "_query_cluster_member_state",
+        create_query_cluster_member_state(slot1_lsn="0/2F0021E8", slot2_lsn="0/2F001940", standby_lsn="0/2F0021E8"),
+    ):
         cm.main_monitoring_loop(requested_check=True)
         assert len(cm.replication_slots_cache) == 2
         assert "test_slot_v1" in cm.replication_slots_cache
@@ -262,9 +270,11 @@ def test_update_cluster_member_state_replication_slots_cache(db: TestPG) -> None
     # Add 5 more slot states which are much further into the future, keep standby position the same
     # it should end up in the cache of size 5, so the last state will be removed
     for lsn in ["0/2F003000", "0/2F003001", "0/2F003002", "0/2F003003", "1/2F003000"]:
-        with patch.object(cm, "_query_cluster_member_state", create_query_cluster_member_state(
-            slot1_lsn=lsn, slot2_lsn="0/2F001940", standby_lsn="0/2F000000"
-        )):
+        with patch.object(
+            cm,
+            "_query_cluster_member_state",
+            create_query_cluster_member_state(slot1_lsn=lsn, slot2_lsn="0/2F001940", standby_lsn="0/2F000000"),
+        ):
             cm.main_monitoring_loop(requested_check=True)
 
     assert len(cm.replication_slots_cache) == 2
@@ -276,9 +286,11 @@ def test_update_cluster_member_state_replication_slots_cache(db: TestPG) -> None
     assert cm.replication_slots_cache["test_slot_v2"] == [repl_slot2_data("0/2F001940")]
 
     # Now advance the standby position, so only the latest state remains
-    with patch.object(cm, "_query_cluster_member_state", create_query_cluster_member_state(
-        slot1_lsn="1/2F003000", slot2_lsn="0/2F001940", standby_lsn="1/2F003000"
-    )):
+    with patch.object(
+        cm,
+        "_query_cluster_member_state",
+        create_query_cluster_member_state(slot1_lsn="1/2F003000", slot2_lsn="0/2F001940", standby_lsn="1/2F003000"),
+    ):
         cm.main_monitoring_loop(requested_check=True)
 
     assert len(cm.replication_slots_cache) == 2

@@ -4,10 +4,10 @@ pglookout - common utility functions
 Copyright (c) 2015 Ohmu Ltd
 See LICENSE for details
 """
-from typing import Dict, Any
+from typing import Any, Dict
+
 import datetime
 import re
-
 
 JsonObject = Dict[str, Any]
 
@@ -17,10 +17,14 @@ def convert_xlog_location_to_offset(wal_location):
     return int(log_id, 16) << 32 | int(offset, 16)
 
 
-ISO_EXT_RE = re.compile(r'(?P<year>\d{4})-(?P<month>\d\d)-(?P<day>\d\d)(T(?P<hour>\d\d):(?P<minute>\d\d)'
-                        r'(:(?P<second>\d\d)(.(?P<microsecond>\d{6}))?)?Z)?$')
-ISO_BASIC_RE = re.compile(r'(?P<year>\d{4})(?P<month>\d\d)(?P<day>\d\d)(T(?P<hour>\d\d)(?P<minute>\d\d)'
-                          r'((?P<second>\d\d)((?P<microsecond>\d{6}))?)?Z)?$')
+ISO_EXT_RE = re.compile(
+    r"(?P<year>\d{4})-(?P<month>\d\d)-(?P<day>\d\d)(T(?P<hour>\d\d):(?P<minute>\d\d)"
+    r"(:(?P<second>\d\d)(.(?P<microsecond>\d{6}))?)?Z)?$"
+)
+ISO_BASIC_RE = re.compile(
+    r"(?P<year>\d{4})(?P<month>\d\d)(?P<day>\d\d)(T(?P<hour>\d\d)(?P<minute>\d\d)"
+    r"((?P<second>\d\d)((?P<microsecond>\d{6}))?)?Z)?$"
+)
 
 
 def parse_iso_datetime(value):
@@ -29,8 +33,9 @@ def parse_iso_datetime(value):
         match = ISO_BASIC_RE.match(value)
     if not match:
         raise ValueError(f"Invalid ISO timestamp {value!r}")
-    parts = dict((key, int(match.group(key) or '0'))
-                 for key in ('year', 'month', 'day', 'hour', 'minute', 'second', 'microsecond'))
+    parts = dict(
+        (key, int(match.group(key) or "0")) for key in ("year", "month", "day", "hour", "minute", "second", "microsecond")
+    )
     return datetime.datetime(tzinfo=None, **parts)
 
 

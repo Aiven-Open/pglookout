@@ -5,11 +5,9 @@ Copyright (c) 2015 Ohmu Ltd
 See LICENSE for details
 """
 
-from pglookout.common import (
-    convert_xlog_location_to_offset,
-    parse_iso_datetime, get_iso_timestamp, ISO_EXT_RE,
-)
+from pglookout.common import convert_xlog_location_to_offset, get_iso_timestamp, ISO_EXT_RE, parse_iso_datetime
 from pytest import raises
+
 import datetime
 
 

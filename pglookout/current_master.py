@@ -9,7 +9,9 @@ See the file `LICENSE` for details.
 """
 
 from __future__ import print_function
+
 from . import version
+
 import argparse
 import json
 import os
@@ -23,9 +25,14 @@ def main(args=None):
 
     parser = argparse.ArgumentParser(
         prog="pglookout_current_master",
-        description="postgresql replication monitoring and failover daemon")
-    parser.add_argument("--version", action="version", help="show program version",
-                        version=version.__version__)
+        description="postgresql replication monitoring and failover daemon",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        help="show program version",
+        version=version.__version__,
+    )
     parser.add_argument("state", help="pglookout state file")
     arg = parser.parse_args(args)
 
@@ -42,7 +49,7 @@ def main(args=None):
             return -1
         with open(state_file_path, "r") as fp:
             state_dict = json.load(fp)
-        current_master = state_dict['current_master']
+        current_master = state_dict["current_master"]
         print(current_master)
     except:  # pylint: disable=bare-except
         return -1

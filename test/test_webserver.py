@@ -9,6 +9,7 @@ See the file `LICENSE` for details.
 from pglookout.common import JsonObject
 from pglookout.webserver import WebServer
 from queue import Queue
+
 import random
 import requests
 import time
@@ -29,14 +30,18 @@ def test_webserver():
         "db_nodes": {},
         "observer_nodes": {},
         "current_master": "1",
-        "replication_slots_cache": {}
+        "replication_slots_cache": {},
     }
 
     def get_overall_state_func() -> JsonObject:
         return overall_state
 
-    web = WebServer(config=config, cluster_state=cluster_state, cluster_monitor_check_queue=cluster_monitor_check_queue,
-                    get_overall_state_func=get_overall_state_func)
+    web = WebServer(
+        config=config,
+        cluster_state=cluster_state,
+        cluster_monitor_check_queue=cluster_monitor_check_queue,
+        get_overall_state_func=get_overall_state_func,
+    )
     try:
         web.start()
         time.sleep(1)

@@ -30,13 +30,22 @@ jobs:
       - id: dependencies
         run: |
           pip install -e .
-          pip install --upgrade pylint flake8 pytest mock
+          pip install -r requirements.dev.txt
 
       - id: pylint
         run: make pylint
 
       - id: flake8
         run: make flake8
+
+      - id: validate-style
+        run: |
+          make fmt
+          if [ $(git diff --name-only --diff-filter=ACMR | wc -l ) != 0 ]; then
+            echo "Reformatting failed! Please run make fmt on your commits and resubmit!" 1>&2;
+            git diff;
+            exit 1;
+          fi
 
   test:
     runs-on: ubuntu-latest

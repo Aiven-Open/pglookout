@@ -7,14 +7,14 @@ Copyright (c) 2014 F-Secure
 This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
-import json
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from logging import getLogger
+from pglookout.common import JsonObject
 from socketserver import ThreadingMixIn
 from threading import Thread
 from typing import Callable
 
-from pglookout.common import JsonObject
+import json
 
 
 class ThreadedWebServer(ThreadingMixIn, HTTPServer):
@@ -26,13 +26,19 @@ class ThreadedWebServer(ThreadingMixIn, HTTPServer):
 
 
 class WebServer(Thread):
-    def __init__(self, config, cluster_state, cluster_monitor_check_queue, get_overall_state_func: Callable[[], JsonObject]):
+    def __init__(
+        self,
+        config,
+        cluster_state,
+        cluster_monitor_check_queue,
+        get_overall_state_func: Callable[[], JsonObject],
+    ):
         Thread.__init__(self)
         self.config = config
         self.cluster_state = cluster_state
         self.cluster_monitor_check_queue = cluster_monitor_check_queue
         self.log = getLogger("WebServer")
-        self.address = self.config.get("http_address", '')
+        self.address = self.config.get("http_address", "")
         self.port = self.config.get("http_port", 15000)
         self.server = None
         self.get_overall_state_func = get_overall_state_func
@@ -57,9 +63,9 @@ class WebServer(Thread):
 class RequestHandler(SimpleHTTPRequestHandler):
     def ok(self, data: JsonObject) -> None:
         self.send_response(200)
-        self.send_header('Content-type', 'application/json')
+        self.send_header("Content-type", "application/json")
         response = json.dumps(data, indent=4).encode("utf8")
-        self.send_header('Content-length', str(len(response)))
+        self.send_header("Content-length", str(len(response)))
         self.end_headers()
         self.wfile.write(response)
 
@@ -80,7 +86,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
             self.server.cluster_monitor_check_queue.put("request from webserver")
             self.server.log.info("Immediate status check requested")
             self.send_response(204)
-            self.send_header('Content-length', str(0))
+            self.send_header("Content-length", str(0))
             self.end_headers()
         else:
             self.send_response(404)

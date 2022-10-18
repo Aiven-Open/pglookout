@@ -3,7 +3,7 @@ long_ver = $(shell git describe --long 2>/dev/null || echo $(short_ver)-0-unknow
 generated = pglookout/version.py
 
 PYTHON ?= python3
-PYLINT_DIRS = pglookout/ test/
+PYTHON_SOURCE_DIRS = pglookout/ test/
 
 all: $(generated)
 	: 'try "make rpm" or "make deb" or "make test"'
@@ -17,10 +17,14 @@ unittest: $(generated)
 	$(PYTHON) -m pytest -vv test/
 
 flake8: $(generated)
-	$(PYTHON) -m flake8 --ignore E722 --max-line-len=125 $(PYLINT_DIRS)
+	$(PYTHON) -m flake8 --ignore E722,E203,W503 --max-line-len=125 $(PYTHON_SOURCE_DIRS)
 
 pylint: $(generated)
-	$(PYTHON) -m pylint --rcfile .pylintrc $(PYLINT_DIRS)
+	$(PYTHON) -m pylint --rcfile .pylintrc $(PYTHON_SOURCE_DIRS)
+
+fmt: $(generated)
+	isort $(PYTHON_SOURCE_DIRS)
+	black $(PYTHON_SOURCE_DIRS)
 
 coverage:
 	$(PYTHON) -m pytest $(PYTEST_ARG) --cov-report term-missing --cov-branch \

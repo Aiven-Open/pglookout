@@ -1,22 +1,39 @@
 [MESSAGES CONTROL]
 disable=
+    bad-option-value,
     duplicate-code,
+    fixme,
+    import-outside-toplevel,
     invalid-name,
-    line-too-long,
+    len-as-condition,
     locally-disabled,
     missing-docstring,
-    star-args,
+    no-else-raise,
+    no-else-return,
+    no-self-use,
+    raise-missing-from,
+    too-few-public-methods,
+    too-many-ancestors,
     too-many-arguments,
+    too-many-boolean-expressions,
     too-many-branches,
+    too-many-function-args,
     too-many-instance-attributes,
     too-many-locals,
-    too-many-nested-blocks,
     too-many-public-methods,
     too-many-statements,
     ungrouped-imports,
+    unspecified-encoding,
     wrong-import-order,
-    unspecified-encoding
+    wrong-import-position
+
+[FORMAT]
+max-line-length=125
+max-module-lines=1100
 
 [REPORTS]
 output-format=text
 reports=no
+
+[TYPECHECK]
+extension-pkg-whitelist=pydantic

@@ -5,7 +5,8 @@ pglookout - postgresql utility functions
 Copyright (c) 2015 Ohmu Ltd
 See LICENSE for details
 """
-from urllib.parse import urlparse, parse_qs  # pylint: disable=no-name-in-module, import-error
+from urllib.parse import parse_qs, urlparse  # pylint: disable=no-name-in-module, import-error
+
 import psycopg2.extensions
 
 
@@ -84,7 +85,7 @@ def parse_connection_string_libpq(connection_string):
                     value += rem[i]
             else:
                 raise ValueError(f"invalid connection_string fragment {rem!r}")
-            connection_string = rem[i + 1:]  # pylint: disable=undefined-loop-variable
+            connection_string = rem[i + 1 :]  # pylint: disable=undefined-loop-variable
         else:
             res = rem.split(None, 1)
             if len(res) > 1:
