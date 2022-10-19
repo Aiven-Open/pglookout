@@ -8,6 +8,7 @@ from pglookout import logutil, pgutil
 from pglookout.pglookout import PgLookout
 from py import path as py_path  # pylint: disable=no-name-in-module
 from unittest.mock import Mock
+
 import os
 import pytest
 import signal
@@ -15,9 +16,7 @@ import subprocess
 import tempfile
 import time
 
-
 PG_VERSIONS = ["14", "13", "12", "11", "10", "9.6"]
-
 
 logutil.configure_logging()
 
@@ -59,12 +58,14 @@ class TestPG:
             return fp.read().strip()
 
     def connection_string(self, user="testuser", dbname="postgres"):
-        return pgutil.create_connection_string({
-            "dbname": dbname,
-            "host": self.pgdata,
-            "port": 5432,
-            "user": user,
-        })
+        return pgutil.create_connection_string(
+            {
+                "dbname": dbname,
+                "host": self.pgdata,
+                "port": 5432,
+                "user": user,
+            }
+        )
 
     def createuser(self, user="testuser"):
         self.run_cmd("createuser", "-h", self.pgdata, "-p", "5432", "-s", user)
@@ -75,11 +76,19 @@ class TestPG:
         subprocess.check_call(argv)
 
     def run_pg(self):
-        self.pg = subprocess.Popen([  # pylint: disable=bad-option-value,consider-using-with
-            os.path.join(self.pgbin, "postgres"),
-            "-D", self.pgdata, "-k", self.pgdata,
-            "-p", "5432", "-c", "listen_addresses=",
-        ])
+        self.pg = subprocess.Popen(  # pylint: disable=bad-option-value,consider-using-with
+            [
+                os.path.join(self.pgbin, "postgres"),
+                "-D",
+                self.pgdata,
+                "-k",
+                self.pgdata,
+                "-p",
+                "5432",
+                "-c",
+                "listen_addresses=",
+            ]
+        )
         time.sleep(1.0)  # let pg start
 
     def kill(self, force=True, immediate=True):
@@ -114,10 +123,7 @@ def db():
     os.environ["HOME"] = tmpdir
     # allow replication connections
     with open(os.path.join(pgdata, "pg_hba.conf"), "w") as fp:
-        fp.write(
-            "local all all trust\n"
-            "local replication all trust\n"
-        )
+        fp.write("local all all trust\nlocal replication all trust\n")
     with open(os.path.join(pgdata, "postgresql.conf"), "a") as fp:
         fp.write(
             "max_wal_senders = 2\n"

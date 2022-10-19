@@ -45,7 +45,13 @@ class StatsClient:
 
         try:
             # format: "user.logins,service=payroll,region=us-west:1|c"
-            parts = [metric.encode("utf-8"), b":", str(value).encode("utf-8"), b"|", metric_type]
+            parts = [
+                metric.encode("utf-8"),
+                b":",
+                str(value).encode("utf-8"),
+                b"|",
+                metric_type,
+            ]
             send_tags = self._tags.copy()
             send_tags.update(tags or {})
             for tag, tag_value in send_tags.items():
@@ -53,5 +59,4 @@ class StatsClient:
 
             self._socket.sendto(b"".join(parts), self._dest_addr)
         except Exception as ex:  # pylint: disable=broad-except
-            self.log.error("Unexpected exception in statsd send: %s: %s",
-                           ex.__class__.__name__, ex)
+            self.log.error("Unexpected exception in statsd send: %s: %s", ex.__class__.__name__, ex)

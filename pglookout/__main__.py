@@ -6,6 +6,7 @@ See LICENSE for details
 """
 
 from . import pglookout
+
 import sys
 
 sys.exit(pglookout.main())

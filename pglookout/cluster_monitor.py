@@ -9,15 +9,16 @@ See the file `LICENSE` for details.
 """
 
 from . import logutil
-from .common import get_iso_timestamp, parse_iso_datetime, convert_xlog_location_to_offset
+from .common import convert_xlog_location_to_offset, get_iso_timestamp, parse_iso_datetime
 from .pgutil import mask_connection_info
 from concurrent.futures import as_completed, ThreadPoolExecutor
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from email.utils import parsedate
 from psycopg2.extras import RealDictCursor
 from queue import Empty
 from threading import Thread
 from typing import List
+
 import datetime
 import errno
 import logging
@@ -25,7 +26,6 @@ import psycopg2
 import requests
 import select
 import time
-
 
 REPLICATION_SLOTS_CACHE_SIZE = 5
 
@@ -67,9 +67,19 @@ def wait_select(conn, timeout=5.0):
 
 
 class ClusterMonitor(Thread):
-    def __init__(self, config, cluster_state, observer_state, create_alert_file, cluster_monitor_check_queue,
-                 failover_decision_queue, is_replication_lag_over_warning_limit, stats, replication_slots_cache,
-                 replication_slots_cache_size: int = REPLICATION_SLOTS_CACHE_SIZE):
+    def __init__(
+        self,
+        config,
+        cluster_state,
+        observer_state,
+        create_alert_file,
+        cluster_monitor_check_queue,
+        failover_decision_queue,
+        is_replication_lag_over_warning_limit,
+        stats,
+        replication_slots_cache,
+        replication_slots_cache_size: int = REPLICATION_SLOTS_CACHE_SIZE,
+    ):
         """Thread which collects cluster state.
 
         Basically a loop which tries to connect to each cluster member and
@@ -114,15 +124,18 @@ class ClusterMonitor(Thread):
             wait_select(conn)
             self.log.debug("Connected to %s", inst_info_str)
         except (PglookoutTimeout, psycopg2.OperationalError) as ex:
-            self.log.warning("%s (%s) connecting to %s (%s)",
-                             ex.__class__.__name__, str(ex).strip(),
-                             instance, inst_info_str)
+            self.log.warning(
+                "%s (%s) connecting to %s (%s)",
+                ex.__class__.__name__,
+                str(ex).strip(),
+                instance,
+                inst_info_str,
+            )
             if "password authentication" in getattr(ex, "message", ""):
                 self.create_alert_file("authentication_error")
             conn = None  # make sure we don't try to use the connection if we timed out
         except Exception as ex:  # pylint: disable=broad-except
-            self.log.exception("Failed to connect to %s (%s)",
-                               instance, inst_info_str)
+            self.log.exception("Failed to connect to %s (%s)", instance, inst_info_str)
             self.stats.unexpected_exception(ex, where="_connect_to_db")
             conn = None
         self.db_conns[instance] = conn
@@ -135,22 +148,31 @@ class ClusterMonitor(Thread):
             response = self.session.get(fetch_uri, timeout=5.0)
 
             # check time difference for large skews
-            remote_server_time = parsedate(response.headers['date'])
+            remote_server_time = parsedate(response.headers["date"])
             remote_server_time = datetime.datetime.fromtimestamp(time.mktime(remote_server_time))
-            time_diff = parse_iso_datetime(result['fetch_time']) - remote_server_time
+            time_diff = parse_iso_datetime(result["fetch_time"]) - remote_server_time
             if time_diff > datetime.timedelta(seconds=5):
-                self.log.error("Time difference between us and observer node %r is %r, response: %r, ignoring response",
-                               instance, time_diff, response.json())  # pylint: disable=no-member
+                self.log.error(
+                    "Time difference between us and observer node %r is %r, response: %r, ignoring response",
+                    instance,
+                    time_diff,
+                    response.json(),
+                )  # pylint: disable=no-member
                 return None
             result.update(response.json())  # pylint: disable=no-member
         except requests.ConnectionError as ex:
-            self.log.warning("%s (%s) fetching state from observer: %r, %r",
-                             ex.__class__.__name__, ex, instance, fetch_uri)
-            result['connection'] = False
+            self.log.warning(
+                "%s (%s) fetching state from observer: %r, %r",
+                ex.__class__.__name__,
+                ex,
+                instance,
+                fetch_uri,
+            )
+            result["connection"] = False
         except Exception as ex:  # pylint: disable=broad-except
             self.log.exception("Problem in fetching state from observer: %r, %r", instance, fetch_uri)
             self.stats.unexpected_exception(ex, where="_fetch_observer_state")
-            result['connection'] = False
+            result["connection"] = False
         return result
 
     def fetch_observer_state(self, instance, uri):
@@ -161,8 +183,12 @@ class ClusterMonitor(Thread):
                 self.observer_state[instance].update(result)
             else:
                 self.observer_state[instance] = result
-        self.log.debug("Observer: %r state was: %r, took: %.4fs to fetch",
-                       instance, result, time.monotonic() - start_time)
+        self.log.debug(
+            "Observer: %r state was: %r, took: %.4fs to fetch",
+            instance,
+            result,
+            time.monotonic() - start_time,
+        )
 
     def connect_to_cluster_nodes_and_cleanup_old_nodes(self):
         leftover_conns = set(self.db_conns) - set(self.config.get("remote_conns", {}))
@@ -179,7 +205,8 @@ class ClusterMonitor(Thread):
         """Fetch logical replication slot definitions"""
 
         self.log.debug("reading replication slot state from %r", instance)
-        cursor.execute("""SELECT
+        cursor.execute(
+            """SELECT
                               slot_name,
                               plugin,
                               slot_type,
@@ -192,7 +219,8 @@ class ClusterMonitor(Thread):
                               ) AS state_data
                             FROM pg_catalog.pg_replication_slots
                             WHERE slot_type = 'logical' AND NOT temporary
-        """)
+        """
+        )
         wait_select(cursor.connection)
         replication_slots = [ReplicationSlot(**slot) for slot in cursor.fetchall()]
         self.log.debug("found %d replication slot(s)", len(replication_slots))
@@ -230,7 +258,7 @@ class ClusterMonitor(Thread):
             c.execute(f"SELECT {joined_fields}")
             wait_select(c.connection)
             maybe_standby_result = c.fetchone()
-            if maybe_standby_result['pg_is_in_recovery']:
+            if maybe_standby_result["pg_is_in_recovery"]:
                 f_result = maybe_standby_result
             else:
                 # First try reading current WAL LSN separately as txid_current may fail in some cases
@@ -258,7 +286,12 @@ class ClusterMonitor(Thread):
                 wait_select(c.connection)
                 master_result = c.fetchone()
                 f_result["pg_last_xlog_replay_location"] = master_result["pg_last_xlog_replay_location"]
-        except (PglookoutTimeout, psycopg2.DatabaseError, psycopg2.InterfaceError, psycopg2.OperationalError) as ex:
+        except (
+            PglookoutTimeout,
+            psycopg2.DatabaseError,
+            psycopg2.InterfaceError,
+            psycopg2.OperationalError,
+        ) as ex:
             self.log.warning("%s (%s) %s %s", ex.__class__.__name__, str(ex).strip(), phase, instance)
             db_conn.close()
             self.db_conns[instance] = None
@@ -280,13 +313,15 @@ class ClusterMonitor(Thread):
         if not result["pg_is_in_recovery"]:
             # These are set to None so when we query a standby promoted to master
             # it looks identical to the results from a master node that's never been a standby
-            result.update({
-                "pg_last_xlog_receive_location": None,
-                "pg_last_xact_replay_timestamp": None,
-                # We simulate replay_location with the results of pg_current_xlog_location on master
-                "pg_last_xlog_replay_location": result["pg_last_xlog_replay_location"],
-                "replication_time_lag": None,  # differentiate from actual lag=0.0
-            })
+            result.update(
+                {
+                    "pg_last_xlog_receive_location": None,
+                    "pg_last_xact_replay_timestamp": None,
+                    # We simulate replay_location with the results of pg_current_xlog_location on master
+                    "pg_last_xlog_replay_location": result["pg_last_xlog_replay_location"],
+                    "replication_time_lag": None,  # differentiate from actual lag=0.0
+                }
+            )
         result.update({"db_time": get_iso_timestamp(result["db_time"]), "connection": True})
         return result
 
@@ -294,8 +329,12 @@ class ClusterMonitor(Thread):
         """Update the cluster state entry for a single cluster member"""
         start_time = time.monotonic()
         result = self._query_cluster_member_state(instance, db_conn)
-        self.log.debug("DB state gotten from: %r was: %r, took: %.4fs to fetch",
-                       instance, result, time.monotonic() - start_time)
+        self.log.debug(
+            "DB state gotten from: %r was: %r, took: %.4fs to fetch",
+            instance,
+            result,
+            time.monotonic() - start_time,
+        )
         if instance in self.cluster_state:
             self.cluster_state[instance].update(result)
         else:
@@ -307,12 +346,19 @@ class ClusterMonitor(Thread):
             for repl_slot in repl_slots_info:
                 slot_states = self.replication_slots_cache.get(repl_slot["slot_name"], [])
                 slot_state_already_cached = next(
-                    (slot_state for slot_state in slot_states
-                        if slot_state["confirmed_flush_lsn"] == repl_slot["confirmed_flush_lsn"]), None
+                    (
+                        slot_state
+                        for slot_state in slot_states
+                        if slot_state["confirmed_flush_lsn"] == repl_slot["confirmed_flush_lsn"]
+                    ),
+                    None,
                 )
                 # If cache is full or client did not flush yet, or we have this LSN already - skip it
-                if len(slot_states) >= self.replication_slots_cache_size or repl_slot["confirmed_flush_lsn"] is None or \
-                        slot_state_already_cached:
+                if (
+                    len(slot_states) >= self.replication_slots_cache_size
+                    or repl_slot["confirmed_flush_lsn"] is None
+                    or slot_state_already_cached
+                ):
                     continue
                 self.replication_slots_cache.setdefault(repl_slot["slot_name"], [])
                 self.replication_slots_cache[repl_slot["slot_name"]].append(repl_slot)
@@ -326,7 +372,10 @@ class ClusterMonitor(Thread):
                 if latest_received_offset is None:
                     latest_received_offset = convert_xlog_location_to_offset(xlog_location)
                 else:
-                    latest_received_offset = max(latest_received_offset, convert_xlog_location_to_offset(xlog_location))
+                    latest_received_offset = max(
+                        latest_received_offset,
+                        convert_xlog_location_to_offset(xlog_location),
+                    )
 
         if latest_received_offset is not None:
             for slot_states in self.replication_slots_cache.values():
