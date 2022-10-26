@@ -370,6 +370,11 @@ Metrics sending follows the `Telegraf spec`_.
 
 .. _`Telegraf spec`: https://github.com/influxdata/telegraf/tree/master/plugins/inputs/statsd
 
+``cluster_monitor_health_timeout_seconds`` (default: ``2 * replication_state_check_interval``)
+
+If set, it will increase the statsd counter `cluster_monitor_health_timeout` if the
+`cluster_monitor` thread has not successfully completed a check since
+`cluster_monitor_health_timeout_seconds`.
 
 License
 =======

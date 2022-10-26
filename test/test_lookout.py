@@ -9,10 +9,13 @@ See the file `LICENSE` for details.
 """
 from pglookout.common import get_iso_timestamp
 from pglookout.pgutil import get_connection_info, get_connection_info_from_config_line
+from typing import Optional, Union
+from unittest.mock import patch
 
 import datetime
 import json
 import os
+import pytest
 import time
 
 
@@ -1038,3 +1041,63 @@ def test_poll_observers_on_warning_only(pgl):
     # pass but because observer data is available and create_node_map was called
     assert "master" in pgl.disconnected_master_nodes
     assert pgl.execute_external_command.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "start_time_offset, last_run_offset, timeout_configured, signaled",
+    [
+        # timeout disabled, should never alert
+        (None, None, "null", False),
+        (0, None, "null", False),
+        (0, 0, "null", False),
+        (60, 0, "null", False),
+        (60, 60, "null", False),
+        (0, 60, "null", False),
+        (60, None, "null", False),
+        (None, 60, "null", False),
+        # no timeout set, should use default of 10s
+        (None, None, None, False),
+        (0, None, None, False),
+        (0, 0, None, False),
+        (10, 0, None, False),
+        (10, 10, None, True),
+        (0, 10, None, True),
+        (9.9, None, None, False),
+        (10, None, None, True),
+        (None, 9.9, None, False),
+        (None, 10, None, True),
+        # timeout 60 seconds
+        (None, None, 60, False),
+        (0, None, 60, False),
+        (0, 0, 60, False),
+        (60, 0, 60, False),
+        (60, 60, 60, True),
+        (0, 60, 60, True),
+        (60, None, 60, True),
+        (None, 60, 60, True),
+        (59.9, None, 60, False),
+        (None, 59.9, 60, False),
+    ],
+)
+def test_check_cluster_monitor_health(
+    pgl,
+    start_time_offset: Optional[float],
+    last_run_offset: Optional[float],
+    timeout_configured: Optional[Union[float, str]],
+    signaled: bool,
+) -> None:
+    now = time.monotonic()
+    if timeout_configured is not None:
+        if timeout_configured == "null":
+            pgl.config["cluster_monitor_health_timeout_seconds"] = None
+        else:
+            pgl.config["cluster_monitor_health_timeout_seconds"] = float(timeout_configured)
+    pgl._start_time = now - start_time_offset if start_time_offset is not None else None  # pylint: disable=protected-access
+    pgl.cluster_monitor.last_monitoring_success_time = now - last_run_offset if last_run_offset is not None else None
+    with patch.object(pgl.stats, "increase") as increase:
+        pgl._check_cluster_monitor_thread_health(now)  # pylint: disable=protected-access
+
+        if signaled:
+            increase.assert_called_once_with("cluster_monitor_health_timeout")
+        else:
+            increase.assert_not_called()

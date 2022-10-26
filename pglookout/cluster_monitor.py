@@ -107,6 +107,7 @@ class ClusterMonitor(Thread):
                 facility=self.config.get("syslog_facility", "local2"),
                 logger=self.log,
             )
+        self.last_monitoring_success_time = None
         self.log.debug("Initialized ClusterMonitor with: %r", cluster_state)
 
     def _connect_to_db(self, instance, dsn):
@@ -427,6 +428,8 @@ class ClusterMonitor(Thread):
                     self.log.error("Got error: %r when checking cluster state", future.exception())
         if requested_check:
             self.failover_decision_queue.put("Completed requested monitoring loop")
+
+        self.last_monitoring_success_time = time.monotonic()
 
     def run(self):
         self.main_monitoring_loop()

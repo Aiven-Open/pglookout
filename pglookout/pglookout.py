@@ -7,7 +7,6 @@ Copyright (c) 2014 F-Secure
 This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
-
 from . import logutil, statsd, version
 from .cluster_monitor import ClusterMonitor
 from .common import convert_xlog_location_to_offset, get_iso_timestamp, JsonObject, parse_iso_datetime
@@ -16,6 +15,7 @@ from .webserver import WebServer
 from packaging.version import parse
 from psycopg2.extensions import adapt
 from queue import Empty, Queue
+from typing import Optional
 
 import argparse
 import copy
@@ -64,6 +64,7 @@ class PgLookout:
         self.cluster_monitor_check_queue = Queue()
         self.failover_decision_queue = Queue()
         self.observer_state_newer_than = datetime.datetime.min
+        self._start_time = None
         self.load_config()
 
         signal.signal(signal.SIGHUP, self.load_config)
@@ -813,10 +814,32 @@ class PgLookout:
     def within_dbpoll_time(self, time1, time2):
         return abs((time1 - time2).total_seconds()) < self.config.get("db_poll_interval", 5.0)
 
+    def _check_cluster_monitor_thread_health(self, now: float) -> None:
+        health_timeout_seconds = self._get_health_timeout_seconds()
+        if health_timeout_seconds:
+            last_successful_run = self.cluster_monitor.last_monitoring_success_time or self._start_time
+            # last_successful_run can only be None if main_loop or this function is called directly
+            if last_successful_run is not None:
+                seconds_since_last_run = now - last_successful_run
+                if seconds_since_last_run >= health_timeout_seconds:
+                    self.stats.increase("cluster_monitor_health_timeout")
+                    self.log.warning("cluster_monitor has not been running for %.1f seconds", seconds_since_last_run)
+
+    def _get_health_timeout_seconds(self) -> Optional[float]:
+        if "cluster_monitor_health_timeout_seconds" in self.config:
+            config_value = self.config.get("cluster_monitor_health_timeout_seconds")
+            return config_value if config_value is None else float(config_value)
+        else:
+            return self._get_check_interval() * 2
+
+    def _get_check_interval(self) -> float:
+        return float(self.config.get("replication_state_check_interval", 5.0))
+
     def main_loop(self):
         while self.running:
             try:
                 self.check_cluster_state()
+                self._check_cluster_monitor_thread_health(now=time.monotonic())
             except Exception as ex:  # pylint: disable=broad-except
                 self.log.exception("Failed to check cluster state")
                 self.stats.unexpected_exception(ex, where="main_loop_check_cluster_state")
@@ -826,7 +849,7 @@ class PgLookout:
                 self.log.exception("Failed to write cluster state")
                 self.stats.unexpected_exception(ex, where="main_loop_writer_cluster_state")
             try:
-                self.failover_decision_queue.get(timeout=float(self.config.get("replication_state_check_interval", 5.0)))
+                self.failover_decision_queue.get(timeout=self._get_check_interval())
                 q = self.failover_decision_queue
                 while not q.empty():
                     try:
@@ -838,6 +861,7 @@ class PgLookout:
                 pass
 
     def run(self):
+        self._start_time = time.monotonic()
         self.cluster_monitor.start()
         self.webserver.start()
         self.main_loop()
