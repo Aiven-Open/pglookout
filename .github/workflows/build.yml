@@ -15,7 +15,7 @@ jobs:
     strategy:
       matrix:
         # only use the newest version for the lint step -> as long as the other version can run it it's ok
-        python-version: [3.9]
+        python-version: [3.11]
 
     steps:
 
@@ -53,7 +53,7 @@ jobs:
     strategy:
       max-parallel: 4
       matrix:
-        python-version: ['3.7', '3.8', '3.9', '3.10']
+        python-version: ['3.9', '3.10', '3.11']
         pg-version: ['9.6', '10', '11', '12', '13', '14']
 
     steps:
