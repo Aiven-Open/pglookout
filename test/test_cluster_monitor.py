@@ -19,6 +19,7 @@ from typing import Callable, Optional, Tuple
 import base64
 import psycopg2
 import pytest
+import time
 
 
 def test_replication_lag():
@@ -70,7 +71,13 @@ def test_main_loop(db):
         is_replication_lag_over_warning_limit=lambda: False,
         replication_slots_cache={},
     )
+    assert cm.last_monitoring_success_time is None
+    before = time.monotonic()
     cm.main_monitoring_loop(requested_check=True)
+
+    assert cm.last_monitoring_success_time is not None
+    assert cm.last_monitoring_success_time > before
+    before = cm.last_monitoring_success_time
 
     assert len(cm.cluster_state) == 2
     assert "test1db" in cm.cluster_state
@@ -91,6 +98,8 @@ def test_main_loop(db):
         with patch.dict(cm.config, {"poll_observers_on_warning_only": False}):
             cm.main_monitoring_loop(requested_check=True)
             fetch_observer_state.assert_called_once_with("local", "URL")
+
+    assert cm.last_monitoring_success_time > before
 
 
 def test_fetch_replication_slot_info(db: TestPG) -> None:
