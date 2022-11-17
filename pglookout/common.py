@@ -4,12 +4,8 @@ pglookout - common utility functions
 Copyright (c) 2015 Ohmu Ltd
 See LICENSE for details
 """
-from typing import Any, Dict
-
 import datetime
 import re
-
-JsonObject = Dict[str, Any]
 
 
 def convert_xlog_location_to_offset(wal_location):

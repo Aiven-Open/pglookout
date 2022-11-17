@@ -9,7 +9,7 @@ See the file `LICENSE` for details.
 """
 
 from . import logutil
-from .common import convert_xlog_location_to_offset, get_iso_timestamp, parse_iso_datetime
+from .common import get_iso_timestamp, parse_iso_datetime
 from .pgutil import mask_connection_info
 from concurrent.futures import as_completed, ThreadPoolExecutor
 from dataclasses import asdict, dataclass
@@ -26,8 +26,6 @@ import psycopg2
 import requests
 import select
 import time
-
-REPLICATION_SLOTS_CACHE_SIZE = 5
 
 
 class PglookoutTimeout(Exception):
@@ -77,8 +75,6 @@ class ClusterMonitor(Thread):
         failover_decision_queue,
         is_replication_lag_over_warning_limit,
         stats,
-        replication_slots_cache,
-        replication_slots_cache_size: int = REPLICATION_SLOTS_CACHE_SIZE,
     ):
         """Thread which collects cluster state.
 
@@ -92,8 +88,6 @@ class ClusterMonitor(Thread):
         self.running = True
         self.cluster_state = cluster_state
         self.observer_state = observer_state
-        self.replication_slots_cache = replication_slots_cache
-        self.replication_slots_cache_size = replication_slots_cache_size
         self.config = config
         self.create_alert_file = create_alert_file
         self.db_conns = {}
@@ -340,64 +334,6 @@ class ClusterMonitor(Thread):
             self.cluster_state[instance].update(result)
         else:
             self.cluster_state[instance] = result
-
-        repl_slots_info = self.cluster_state[instance].get("replication_slots")
-        if repl_slots_info:
-            # This is the master, add new state to the cache
-            for repl_slot in repl_slots_info:
-                slot_states = self.replication_slots_cache.get(repl_slot["slot_name"], [])
-                slot_state_already_cached = next(
-                    (
-                        slot_state
-                        for slot_state in slot_states
-                        if slot_state["confirmed_flush_lsn"] == repl_slot["confirmed_flush_lsn"]
-                    ),
-                    None,
-                )
-                # If cache is full or client did not flush yet, or we have this LSN already - skip it
-                if (
-                    len(slot_states) >= self.replication_slots_cache_size
-                    or repl_slot["confirmed_flush_lsn"] is None
-                    or slot_state_already_cached
-                ):
-                    continue
-                self.replication_slots_cache.setdefault(repl_slot["slot_name"], [])
-                self.replication_slots_cache[repl_slot["slot_name"]].append(repl_slot)
-
-        # Invalidate old states and truncate cache if needed, we assume that if there is at least one node which
-        # has already advanced to the LSN position from the slot, then this slot position is usable
-        latest_received_offset = None
-        for node_state in self.cluster_state.values():
-            xlog_location = node_state.get("pg_last_xlog_receive_location")
-            if xlog_location:
-                if latest_received_offset is None:
-                    latest_received_offset = convert_xlog_location_to_offset(xlog_location)
-                else:
-                    latest_received_offset = max(
-                        latest_received_offset,
-                        convert_xlog_location_to_offset(xlog_location),
-                    )
-
-        if latest_received_offset is not None:
-            for slot_states in self.replication_slots_cache.values():
-                latest_usable_state = None
-                for idx, slot_state in enumerate(slot_states):
-                    if convert_xlog_location_to_offset(slot_state["confirmed_flush_lsn"]) >= latest_received_offset:
-                        latest_usable_state = idx - 1
-                        break
-
-                if latest_usable_state is None:
-                    # All slots are old enough, just leave the last one
-                    if slot_states:
-                        slot_states[0:-1] = []
-                    continue
-
-                if latest_usable_state <= 0:
-                    # Nothing to purge
-                    continue
-
-                # Keep everything from the latest usable one
-                slot_states[0:latest_usable_state] = []
 
         # record the first time we saw replication happen from the master
         if result.get("pg_last_xlog_receive_location"):
