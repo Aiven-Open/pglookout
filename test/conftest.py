@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 import time
 
-PG_VERSIONS = ["14", "13", "12", "11", "10", "9.6"]
+PG_VERSIONS = ["15", "14", "13", "12", "11", "10", "9.6"]
 
 logutil.configure_logging()
 
