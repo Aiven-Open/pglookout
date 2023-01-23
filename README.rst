@@ -28,7 +28,7 @@ viewpoint on the health of the cluster.
 Requirements
 ============
 
-pglookout can monitor PostgreSQL versions 9.6 and above.
+pglookout can monitor PostgreSQL versions 10 and above.
 
 pglookout has been developed and tested on modern Linux x86-64 systems, but
 should work on other platforms that provide the required modules.  pglookout is
