@@ -321,12 +321,12 @@ class PgLookout:
         self.log.debug("Cluster has %s standbys, %s observers and %s as master, own_db: %r, own_state: %r",
                        standby_info, observer_info, self.current_master, self.own_db, own_state or "observer")
 
+        self.check_number_of_replicating_nodes(own_state)
         if self.own_db:
             if self.own_db == self.current_master:
                 # We are the master of this cluster, nothing to do
                 self.log.debug("We %r: %r are still the master node: %r of this cluster, nothing to do.",
                                self.own_db, own_state, master_node)
-                self.check_number_of_replicating_nodes(own_state)
                 return
             if not standby_nodes:
                 self.log.warning("No standby nodes set, master node: %r", master_node)
@@ -334,13 +334,14 @@ class PgLookout:
             self.consider_failover(own_state, master_node, standby_nodes)
 
     def check_number_of_replicating_nodes(self, own_state):
-        if self.own_db and self.minimum_replicating_nodes and self.too_few_replicating_nodes_command:
-            if self.own_db == self.current_master and own_state.get('connection'):
+        if self.own_db and self.minimum_replicating_nodes and self.too_few_replicating_nodes_command and self.connected_master_nodes != {}:
+            connected_masters = list(zip(*self.connected_master_nodes.items()))[0]
+            if self.own_db in connected_masters and own_state.get('connection'):
                 number_of_standby_nodes = own_state.get('pg_master_replication_connections')
                 self.log.debug("We are master and %d nodes currently replicate from us, need at least %d", number_of_standby_nodes, self.minimum_replicating_nodes)
                 if number_of_standby_nodes < self.minimum_replicating_nodes:
                     now = time.monotonic()
-                    self.log.warning("Too few replicating nodes in cluster, %r standby nodes exist,  "
+                    self.log.warning("Too few replicating nodes from this master, %r standby nodes exist,  "
                              "%r nodes needed, this has been going on for %.2f seconds, "
                              "timeout set to %.2f seconds",
                              number_of_standby_nodes, self.minimum_replicating_nodes, 
