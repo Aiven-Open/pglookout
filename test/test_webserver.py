@@ -11,7 +11,6 @@ from queue import Queue
 
 import random
 import requests
-import time
 
 
 def test_webserver():
@@ -28,7 +27,9 @@ def test_webserver():
     web = WebServer(config=config, cluster_state=cluster_state, cluster_monitor_check_queue=cluster_monitor_check_queue)
     try:
         web.start()
-        time.sleep(1)
+        # wait for the thread to have started, else we're blocking forever as web.close can't shutdown the thread
+        web.is_initialized.wait(timeout=30.0)
+
         result = requests.get(f"{base_url}/state.json", timeout=5).json()
         assert result == cluster_state
 
