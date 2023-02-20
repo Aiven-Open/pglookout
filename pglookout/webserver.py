@@ -13,6 +13,7 @@ from socketserver import ThreadingMixIn
 from threading import Thread
 
 import json
+import threading
 
 
 class ThreadedWebServer(ThreadingMixIn, HTTPServer):
@@ -33,6 +34,7 @@ class WebServer(Thread):
         self.port = self.config.get("http_port", 15000)
         self.server = None
         self.log.debug("WebServer initialized with address: %r port: %r", self.address, self.port)
+        self.is_initialized = threading.Event()
 
     def run(self):
         # We bind the port only when we start running
@@ -40,6 +42,7 @@ class WebServer(Thread):
         self.server.cluster_state = self.cluster_state
         self.server.log = self.log
         self.server.cluster_monitor_check_queue = self.cluster_monitor_check_queue
+        self.is_initialized.set()
         self.server.serve_forever()
 
     def close(self):
