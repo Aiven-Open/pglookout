@@ -32,14 +32,12 @@ exclude = [
     # Implementation.
     'pglookout/__main__.py',
     'pglookout/cluster_monitor.py',
-    'pglookout/common.py',
     'pglookout/pglookout.py',
     'pglookout/version.py',
     'pglookout/webserver.py',
     # Tests.
     'test/conftest.py',
     'test/test_cluster_monitor.py',
-    'test/test_common.py',
     'test/test_lookout.py',
     'test/test_webserver.py',
     # Other.
