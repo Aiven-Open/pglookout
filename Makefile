@@ -3,7 +3,7 @@ long_ver = $(shell git describe --long 2>/dev/null || echo $(short_ver)-0-unknow
 generated = pglookout/version.py
 
 PYTHON ?= python3
-PYTHON_SOURCE_DIRS = pglookout/ test/
+PYTHON_SOURCE_DIRS = pglookout/ test/ stubs/
 
 all: $(generated)
 	: 'try "make rpm" or "make deb" or "make test"'
@@ -17,7 +17,7 @@ unittest: $(generated)
 	$(PYTHON) -m pytest
 
 mypy: $(generated)
-	$(PYTHON) -m mypy
+	MYPYPATH=stubs $(PYTHON) -m mypy
 
 flake8: $(generated)
 	$(PYTHON) -m flake8 $(PYTHON_SOURCE_DIRS)
