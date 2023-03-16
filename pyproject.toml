@@ -36,7 +36,6 @@ exclude = [
     'pglookout/current_master.py',
     'pglookout/logutil.py',
     'pglookout/pglookout.py',
-    'pglookout/pgutil.py',
     'pglookout/statsd.py',
     'pglookout/version.py',
     'pglookout/webserver.py',
@@ -45,7 +44,6 @@ exclude = [
     'test/test_cluster_monitor.py',
     'test/test_common.py',
     'test/test_lookout.py',
-    'test/test_pgutil.py',
     'test/test_webserver.py',
     # Other.
     'setup.py',
