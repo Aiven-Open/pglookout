@@ -5,6 +5,7 @@ pglookout DEV
 * Various bug fixes and operability improvements
 * Testing and CI improvements, moving from Travis to GitHub actions
 * Switch to using primary and replica to describe server roles in most places
+* Add type hints
 
 pglookout 2.0.0 (2018-10-12)
 ============================

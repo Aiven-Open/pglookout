@@ -8,6 +8,11 @@ pglookout.egg-info/
 coverage.xml
 /pglookout/version.py
 *.swp
+.hypothesis/
 
 .idea/
 rpm/
+dist/
+
+# Generated targets
+pglookout-rpm-src.tar

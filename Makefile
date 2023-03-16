@@ -1,4 +1,4 @@
-short_ver = 2.0.2
+short_ver = 2.0.3
 long_ver = $(shell git describe --long 2>/dev/null || echo $(short_ver)-0-unknown-g`git describe --always`)
 generated = pglookout/version.py
 
@@ -11,16 +11,19 @@ all: $(generated)
 pglookout/version.py: version.py
 	$(PYTHON) $^ $@
 
-test: flake8 pylint unittest
+test: mypy flake8 pylint unittest
 
 unittest: $(generated)
-	$(PYTHON) -m pytest -vv test/
+	$(PYTHON) -m pytest
+
+mypy: $(generated)
+	$(PYTHON) -m mypy
 
 flake8: $(generated)
-	$(PYTHON) -m flake8 --ignore E722,E203,W503 --max-line-len=125 $(PYTHON_SOURCE_DIRS)
+	$(PYTHON) -m flake8 $(PYTHON_SOURCE_DIRS)
 
 pylint: $(generated)
-	$(PYTHON) -m pylint --rcfile .pylintrc $(PYTHON_SOURCE_DIRS)
+	$(PYTHON) -m pylint $(PYTHON_SOURCE_DIRS)
 
 fmt: $(generated)
 	isort $(PYTHON_SOURCE_DIRS)
