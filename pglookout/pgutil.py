@@ -5,16 +5,80 @@ pglookout - postgresql utility functions
 Copyright (c) 2015 Ohmu Ltd
 See LICENSE for details
 """
+from __future__ import annotations
+
+from typing import cast, Literal, TypedDict
 from urllib.parse import parse_qs, urlparse  # pylint: disable=no-name-in-module, import-error
 
 import psycopg2.extensions
 
 
-def create_connection_string(connection_info):
-    return psycopg2.extensions.make_dsn(**connection_info)
+class DsnDictBase(TypedDict, total=False):
+    user: str
+    password: str
+    host: str
+    port: str | int
 
 
-def mask_connection_info(info):
+class DsnDict(DsnDictBase, total=False):
+    dbname: str
+
+
+class DsnDictDeprecated(DsnDictBase, total=False):
+    database: str
+
+
+class ConnectionParameterKeywords(TypedDict, total=False):
+    """Parameter Keywords for Connection.
+
+    See:
+        https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS
+    """
+
+    host: str
+    hostaddr: str
+    port: str
+    dbname: str
+    user: str
+    password: str
+    passfile: str
+    channel_binding: Literal["require", "prefer", "disable"]
+    connect_timeout: str
+    client_encoding: str
+    options: str
+    application_name: str
+    fallback_application_name: str
+    keepalives: Literal["0", "1"]
+    keepalives_idle: str
+    keepalives_interval: str
+    keepalives_count: str
+    tcp_user_timeout: str
+    replication: Literal["true", "on", "yes", "1", "database", "false", "off", "no", "0"]
+    gssencmode: Literal["disable", "prefer", "require"]
+    sslmode: Literal["disable", "allow", "prefer", "require", "verify-ca", "verify-full"]
+    requiressl: Literal["0", "1"]
+    sslcompression: Literal["0", "1"]
+    sslcert: str
+    sslkey: str
+    sslpassword: str
+    sslrootcert: str
+    sslcrl: str
+    sslcrldir: str
+    sslsni: Literal["0", "1"]
+    requirepeer: str
+    ssl_min_protocol_version: Literal["TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"]
+    ssl_max_protocol_version: Literal["TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"]
+    krbsrvname: str
+    gsslib: str
+    service: str
+    target_session_attrs: Literal["any", "read-write", "read-only", "primary", "standby", "prefer-standby"]
+
+
+def create_connection_string(connection_info: DsnDict | DsnDictDeprecated | ConnectionParameterKeywords) -> str:
+    return str(psycopg2.extensions.make_dsn(**connection_info))
+
+
+def mask_connection_info(info: str) -> str:
     masked_info = get_connection_info(info)
     password = masked_info.pop("password", None)
     connection_string = create_connection_string(masked_info)
@@ -22,24 +86,29 @@ def mask_connection_info(info):
     return f"{connection_string}; {message}"
 
 
-def get_connection_info_from_config_line(line):
+def get_connection_info_from_config_line(line: str) -> ConnectionParameterKeywords:
     _, value = line.split("=", 1)
     value = value.strip()[1:-1].replace("''", "'")
     return get_connection_info(value)
 
 
-def get_connection_info(info):
-    """turn a connection info object into a dict or return it if it was a
-    dict already.  supports both the traditional libpq format and the new
-    url format"""
+def get_connection_info(
+    info: str | DsnDict | DsnDictDeprecated | ConnectionParameterKeywords,
+) -> ConnectionParameterKeywords:
+    """Get a normalized connection info dict from a connection string or a dict.
+
+    Supports both the traditional libpq format and the new url format.
+    """
     if isinstance(info, dict):
-        return info.copy()
+        # Potentially, we might clean deprecated DSN dicts: `database` -> `dbname`.
+        # Also, psycopg2 will validate the keys and values.
+        return parse_connection_string_libpq(create_connection_string(info))
     if info.startswith("postgres://") or info.startswith("postgresql://"):
         return parse_connection_string_url(info)
     return parse_connection_string_libpq(info)
 
 
-def parse_connection_string_url(url):
+def parse_connection_string_url(url: str) -> ConnectionParameterKeywords:
     # drop scheme from the url as some versions of urlparse don't handle
     # query and path properly for urls with a non-http scheme
     schemeless_url = url.split(":", 1)[1]
@@ -57,12 +126,15 @@ def parse_connection_string_url(url):
         fields["dbname"] = p.path[1:]
     for k, v in parse_qs(p.query).items():
         fields[k] = v[-1]
-    return fields
+    return cast(ConnectionParameterKeywords, fields)
 
 
-def parse_connection_string_libpq(connection_string):
-    """parse a postgresql connection string as defined in
-    http://www.postgresql.org/docs/current/static/libpq-connect.html#LIBPQ-CONNSTRING"""
+def parse_connection_string_libpq(connection_string: str) -> ConnectionParameterKeywords:
+    """Parse a postgresql connection string.
+
+    See:
+        http://www.postgresql.org/docs/current/static/libpq-connect.html#LIBPQ-CONNSTRING
+    """
     fields = {}
     while True:
         connection_string = connection_string.strip()
@@ -92,5 +164,8 @@ def parse_connection_string_libpq(connection_string):
                 value, connection_string = res
             else:
                 value, connection_string = rem, ""
+        # This one is case-insensitive. To continue benefiting from mypy, we make it lowercase.
+        if key == "replication":
+            value = value.lower()
         fields[key] = value
-    return fields
+    return cast(ConnectionParameterKeywords, fields)

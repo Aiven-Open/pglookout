@@ -6,14 +6,14 @@ Copyright (c) 2015 Ohmu Ltd
 See LICENSE for details
 """
 
-from pglookout.pgutil import create_connection_string, get_connection_info, mask_connection_info
+from pglookout.pgutil import ConnectionParameterKeywords, create_connection_string, get_connection_info, mask_connection_info
 from pytest import raises
 
 
-def test_connection_info():
+def test_connection_info() -> None:
     url = "postgres://hannu:secret@dbhost.local:5555/abc?replication=true&sslmode=foobar&sslmode=require"
     cs = "host=dbhost.local user='hannu'   dbname='abc'\nreplication=true   password=secret sslmode=require port=5555"
-    ci = {
+    ci: ConnectionParameterKeywords = {
         "host": "dbhost.local",
         "port": "5555",
         "user": "hannu",
@@ -39,7 +39,7 @@ def test_connection_info():
         get_connection_info("foo=bar bar='x")
 
 
-def test_mask_connection_info():
+def test_mask_connection_info() -> None:
     url = "postgres://michael:secret@dbhost.local:5555/abc?replication=true&sslmode=foobar&sslmode=require"
     cs = "host=dbhost.local user='michael'   dbname='abc'\nreplication=true   password=secret sslmode=require port=5555"
     ci = get_connection_info(cs)
