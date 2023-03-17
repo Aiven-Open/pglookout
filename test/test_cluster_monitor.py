@@ -7,12 +7,15 @@ See LICENSE for details
 from .conftest import TestPG
 from contextlib import closing
 from datetime import datetime, timedelta
-from mock import patch
 from packaging import version
 from pglookout import statsd
 from pglookout.cluster_monitor import ClusterMonitor
+from pglookout.common_types import MemberState, ObserverState
+from pglookout.config import Config
 from psycopg2.extras import RealDictCursor
 from queue import Queue
+from typing import NoReturn
+from unittest.mock import patch
 
 import base64
 import psycopg2
@@ -20,28 +23,31 @@ import pytest
 import time
 
 
-def test_replication_lag():
+def test_replication_lag() -> None:
     # pylint: disable=protected-access
     now = datetime.now()
-    status = {
+    status: MemberState = {
         "db_time": now,
         "pg_is_in_recovery": True,
         "pg_last_xact_replay_timestamp": now,
         "pg_last_xlog_receive_location": "0/0000001",
         "pg_last_xlog_replay_location": "0/0000002",
     }
+
     result = ClusterMonitor._parse_status_query_result(status.copy())
     assert result["replication_time_lag"] == 0.0
-    status["db_time"] += timedelta(seconds=50, microseconds=42)
+
+    status["db_time"] = now + timedelta(seconds=50, microseconds=42)
     result = ClusterMonitor._parse_status_query_result(status.copy())
     assert result["replication_time_lag"] == 50.000042
+
     status["db_time"] = now + timedelta(hours=42)
     result = ClusterMonitor._parse_status_query_result(status.copy())
     assert result["replication_time_lag"] == 151200.0
 
 
-def test_main_loop(db):
-    config = {
+def test_main_loop(db: TestPG) -> None:
+    config: Config = {
         "remote_conns": {
             "test1db": db.connection_string("testuser"),
             "test2db": db.connection_string("otheruser"),
@@ -49,14 +55,14 @@ def test_main_loop(db):
         "observers": {"local": "URL"},
         "poll_observers_on_warning_only": True,
     }
-    cluster_state = {}
-    observer_state = {}
+    cluster_state: dict[str, MemberState] = {}
+    observer_state: dict[str, ObserverState] = {}
 
-    def create_alert_file(arg):
+    def create_alert_file(arg: str) -> NoReturn:
         raise Exception(arg)
 
-    cluster_monitor_check_queue = Queue()
-    failover_decision_queue = Queue()
+    cluster_monitor_check_queue: Queue[str] = Queue()
+    failover_decision_queue: Queue[str] = Queue()
 
     cm = ClusterMonitor(
         config=config,
@@ -103,7 +109,7 @@ def test_fetch_replication_slot_info(db: TestPG) -> None:
     if version.parse(db.pgver) < version.parse("10"):
         pytest.skip(f"unsupported pg version: {db.pgver}")
 
-    config = {
+    config: Config = {
         "remote_conns": {
             "test1db": db.connection_string("testuser"),
             "test2db": db.connection_string("otheruser"),
@@ -111,14 +117,14 @@ def test_fetch_replication_slot_info(db: TestPG) -> None:
         "observers": {"local": "URL"},
         "poll_observers_on_warning_only": True,
     }
-    cluster_state = {}
-    observer_state = {}
+    cluster_state: dict[str, MemberState] = {}
+    observer_state: dict[str, ObserverState] = {}
 
-    def create_alert_file(arg):
+    def create_alert_file(arg: str) -> NoReturn:
         raise Exception(arg)
 
-    cluster_monitor_check_queue = Queue()
-    failover_decision_queue = Queue()
+    cluster_monitor_check_queue: Queue[str] = Queue()
+    failover_decision_queue: Queue[str] = Queue()
 
     cm = ClusterMonitor(
         config=config,

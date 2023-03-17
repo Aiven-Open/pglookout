@@ -31,18 +31,20 @@ files = [
 exclude = [
     # Implementation.
     'pglookout/__main__.py',
-    'pglookout/cluster_monitor.py',
     'pglookout/pglookout.py',
     'pglookout/version.py',
     # Tests.
     'test/conftest.py',
-    'test/test_cluster_monitor.py',
     'test/test_lookout.py',
     # Other.
     'setup.py',
     'version.py',
 ]
 
+[[tool.mypy.overrides]]
+module = "test.test_cluster_monitor"
+# ignore no-untyped-call because conftest can only type hinted at the end. Remove at the end.
+disallow_untyped_calls = false
 
 [tool.pylint.'MESSAGES CONTROL']
 disable = [
