@@ -34,7 +34,6 @@ exclude = [
     'pglookout/cluster_monitor.py',
     'pglookout/common.py',
     'pglookout/pglookout.py',
-    'pglookout/statsd.py',
     'pglookout/version.py',
     'pglookout/webserver.py',
     # Tests.
