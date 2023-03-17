@@ -29,6 +29,10 @@ fmt: $(generated)
 	isort $(PYTHON_SOURCE_DIRS)
 	black $(PYTHON_SOURCE_DIRS)
 
+fmt-check: $(generated)
+	isort --check $(PYTHON_SOURCE_DIRS)
+	black --check $(PYTHON_SOURCE_DIRS)
+
 coverage:
 	$(PYTHON) -m pytest $(PYTEST_ARG) --cov-report term-missing --cov-branch \
 		--cov-report xml:coverage.xml --cov pglookout test/

@@ -32,6 +32,9 @@ jobs:
           pip install -e .
           pip install -r requirements.dev.txt
 
+      - id: mypy
+        run: make mypy
+
       - id: pylint
         run: make pylint
 
@@ -39,13 +42,7 @@ jobs:
         run: make flake8
 
       - id: validate-style
-        run: |
-          make fmt
-          if [ $(git diff --name-only --diff-filter=ACMR | wc -l ) != 0 ]; then
-            echo "Reformatting failed! Please run make fmt on your commits and resubmit!" 1>&2;
-            git diff;
-            exit 1;
-          fi
+        run: make fmt-check
 
   test:
     runs-on: ubuntu-latest
