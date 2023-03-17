@@ -31,7 +31,6 @@ files = [
 exclude = [
     # Implementation.
     'pglookout/__main__.py',
-    'pglookout/cluster_monitor.py',
     'pglookout/common.py',
     'pglookout/current_master.py',
     'pglookout/logutil.py',
@@ -42,7 +41,6 @@ exclude = [
     'pglookout/webserver.py',
     # Tests.
     'test/conftest.py',
-    'test/test_cluster_monitor.py',
     'test/test_common.py',
     'test/test_lookout.py',
     'test/test_pgutil.py',
@@ -51,6 +49,8 @@ exclude = [
     'setup.py',
     'version.py',
 ]
+# ignore no-untyped-call because each PR is made independently. Remove at the end.
+disallow_untyped_calls = false
 
 
 [tool.pylint.'MESSAGES CONTROL']

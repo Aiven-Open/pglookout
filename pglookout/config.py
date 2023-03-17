@@ -34,7 +34,7 @@ class Config(TypedDict, total=False):
     pg_stop_command: str
     poll_observers_on_warning_only: bool
     primary_conninfo_template: str
-    remote_conns: dict[str, str]
+    remote_conns: dict[str, str]  # instance name -> dsn
     replication_catchup_timeout: float
     replication_state_check_interval: float
     statsd: Statsd

@@ -2,7 +2,6 @@ black==22.10.0
 flake8
 flake8-pyproject==1.2.2
 isort==5.10.1
-mock
 mypy==1.1.1
 types-psycopg2==2.9.21.8
 types-requests==2.26.1
