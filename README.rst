@@ -201,6 +201,11 @@ description of the current state of the cluster which is under monitoring.
 Configuration keys
 ==================
 
+``alert_file_dir`` (default ``os.getcwd()``)
+
+Directory in which alert files for replication warning and failover
+are created.
+
 ``autofollow`` (default ``false``)
 
 Do you want pglookout to try to start following the new primary. Useful
@@ -210,38 +215,24 @@ to start following the new primary.
 Requires ``pg_data_directory``, ``pg_start_command``
 and ``pg_stop_command`` configuration keys to be set.
 
+``cluster_monitor_health_timeout_seconds`` (default: ``2 * replication_state_check_interval``)
+
+If set, it will increase the statsd counter `cluster_monitor_health_timeout` if the
+`cluster_monitor` thread has not successfully completed a check since
+`cluster_monitor_health_timeout_seconds`.
+
 ``db_poll_interval`` (default ``5.0``)
 
 Interval on how often should the connections defined in remote_conns
 be polled for information on DB replication state.
 
-``remote_conns`` (default ``{}``)
+``failover_command`` (default ``""``)
 
-PG database connection strings that the pglookout process should monitor.
-Keys of the object should be names of the remotes and values must be valid
-PostgreSQL connection strings or connection info objects.
+Shell command to execute in case the node has deemed itself in need of promotion
 
-``primary_conninfo_template``
+``failover_sleep_time`` (default ``0.0``)
 
-Connection string or connection info object template to use when setting a new
-primary_conninfo value for recovery.conf after a failover has happened.  Any
-provided hostname and database name in the template is ignored and they are
-replaced with a replication connection to the new primary node.
-
-Required when ``autofollow`` is true.
-
-``observers`` (default ``{}``)
-
-This object contains key value pairs like ``{"1.2.3.4":
-"http://2.3.4.5:15000"}``.  They are used to determine the location of
-pglookout observer processes.  Observers are processes that don't take any
-actions, but simply give a third party viewpoint on the state of the
-cluster.  Useful especially during net splits.
-
-``poll_observers_on_warning_only`` (default ``False``)
-
-this allows observers to be polled only when replication lag is over
-``warning_replication_time_lag``
+Time to sleep after a failover command has been issued.
 
 ``http_address`` (default ``""``)
 
@@ -251,55 +242,36 @@ HTTP webserver address, by default pglookout binds to all interfaces.
 
 HTTP webserver port.
 
-``replication_state_check_interval`` (default ``10.0``)
-
-How often should pglookout check the replication state in order to
-make decisions on should the node be promoted.
-
-``failover_sleep_time`` (default ``0.0``)
-
-Time to sleep after a failover command has been issued.
-
-``maintenance_mode_file`` (default ``"/tmp/pglookout_maintenance_mode_file"``)
-
-If a file exists in this location, this node will not be considered
-for promotion to primary.
-
-``missing_master_from_config_timeout`` (default ``15``)
-
-In seconds the amount of time before we do a failover decision if a
-previously existing primary has been removed from the config file and
-we have gotten a SIGHUP.
-
-``alert_file_dir`` (default ``os.getcwd()``)
-
-Directory in which alert files for replication warning and failover
-are created.
-
 ``json_state_file_path`` (default ``"/tmp/pglookout_state.json"``)
 
 Location of a JSON state file which describes the state of the
 pglookout process.
-
-``max_failover_replication_time_lag`` (default ``120.0``)
-
-Replication time lag after which failover_command will be executed and a
-failover_has_happened file will be created.
-
-``warning_replication_time_lag`` (default ``30.0``)
-
-Replication time lag at which point to execute
-over_warning_limit_command and to create a warning file.
-
-``failover_command`` (default ``""``)
-
-Shell command to execute in case the node has deemed itself in need of promotion
 
 ``known_gone_nodes`` (default ``[]``)
 
 Lists nodes that are explicitly known to have left the cluster.  If the old
 primary is removed in a controlled manner it should be added to this list to
 ensure there's no extra delay when making promotion decision.
+
+``log_level`` (default ``"INFO"``)
+
+Determines log level of pglookout.
+
+``maintenance_mode_file`` (default ``"/tmp/pglookout_maintenance_mode_file"``)
+
+If a file exists in this location, this node will not be considered
+for promotion to primary.
+
+``max_failover_replication_time_lag`` (default ``120.0``)
+
+Replication time lag after which failover_command will be executed and a
+failover_has_happened file will be created.
+
+``missing_master_from_config_timeout`` (default ``15``)
+
+In seconds the amount of time before we do a failover decision if a
+previously existing primary has been removed from the config file and
+we have gotten a SIGHUP.
 
 ``never_promote_these_nodes`` (default ``[]``)
 
@@ -308,6 +280,14 @@ you have primary ``p`` which fails and replicas ``a`` and ```b``, even if
 ``b`` is ahead but is listed in ``never_promote_these_nodes``, ``a`` will be
 promoted.
 
+``observers`` (default ``{}``)
+
+This object contains key value pairs like ``{"1.2.3.4":
+"http://2.3.4.5:15000"}``.  They are used to determine the location of
+pglookout observer processes.  Observers are processes that don't take any
+actions, but simply give a third party viewpoint on the state of the
+cluster.  Useful especially during net splits.
+
 ``over_warning_limit_command`` (default ``null``)
 
 Shell command to be executed once replication lag is warning_replication_time_lag
@@ -315,10 +295,6 @@ Shell command to be executed once replication lag is warning_replication_time_la
 ``own_db``
 
 The key of the entry in ``remote_conns`` that matches this node.
-
-``log_level`` (default ``"INFO"``)
-
-Determines log level of pglookout.
 
 ``pg_data_directory`` (default ``"/var/lib/pgsql/data"``)
 
@@ -336,18 +312,35 @@ true. Usually something like "sudo systemctl start postgresql".
 Command to stop a PostgreSQL process on a node which has autofollow set to
 true. Usually something like "sudo systemctl start postgresql".
 
-``syslog`` (default ``false``)
+``poll_observers_on_warning_only`` (default ``False``)
 
-Determines whether syslog logging should be turned on or not.
+this allows observers to be polled only when replication lag is over
+``warning_replication_time_lag``
 
-``syslog_address`` (default ``"/dev/log"``)
+``primary_conninfo_template``
 
-Determines syslog address to use in logging (requires syslog to be
-true as well)
+Connection string or connection info object template to use when setting a new
+primary_conninfo value for recovery.conf after a failover has happened.  Any
+provided hostname and database name in the template is ignored and they are
+replaced with a replication connection to the new primary node.
 
-``syslog_facility`` (default ``"local2"``)
+Required when ``autofollow`` is true.
 
-Determines syslog log facility. (requires syslog to be true as well)
+``remote_conns`` (default ``{}``)
+
+PG database connection strings that the pglookout process should monitor.
+Keys of the object should be names of the remotes and values must be valid
+PostgreSQL connection strings or connection info objects.
+
+``replication_catchup_timeout`` (default ``300.0``)
+
+How long should pglookout wait for a node to catch up with the primary
+before it decides to promote itself.
+
+``replication_state_check_interval`` (default ``10.0``)
+
+How often should pglookout check the replication state in order to
+make decisions on should the node be promoted.
 
 ``statsd`` (default: disabled)
 
@@ -368,13 +361,25 @@ The ``tags`` setting can be used to enter optional tag values for the metrics.
 
 Metrics sending follows the `Telegraf spec`_.
 
+``syslog`` (default ``false``)
+
+Determines whether syslog logging should be turned on or not.
+
+``syslog_address`` (default ``"/dev/log"``)
+
+Determines syslog address to use in logging (requires syslog to be
+true as well)
+
+``syslog_facility`` (default ``"local2"``)
+
+Determines syslog log facility. (requires syslog to be true as well)
+
+``warning_replication_time_lag`` (default ``30.0``)
+
+Replication time lag at which point to execute
+over_warning_limit_command and to create a warning file.
+
 .. _`Telegraf spec`: https://github.com/influxdata/telegraf/tree/master/plugins/inputs/statsd
-
-``cluster_monitor_health_timeout_seconds`` (default: ``2 * replication_state_check_interval``)
-
-If set, it will increase the statsd counter `cluster_monitor_health_timeout` if the
-`cluster_monitor` thread has not successfully completed a check since
-`cluster_monitor_health_timeout_seconds`.
 
 License
 =======
