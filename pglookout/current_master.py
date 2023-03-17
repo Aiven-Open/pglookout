@@ -8,7 +8,7 @@ This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
 
-from __future__ import print_function
+from __future__ import annotations
 
 from . import version
 
@@ -19,7 +19,7 @@ import sys
 import time
 
 
-def main(args=None):
+def main(args: list[str] | None = None) -> int:
     if args is None:
         args = sys.argv[1:]
 
