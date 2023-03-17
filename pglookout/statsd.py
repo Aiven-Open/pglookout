@@ -9,28 +9,65 @@ Supports telegraf's statsd protocol extension for 'key=value' tags:
 
     https://github.com/influxdata/telegraf/tree/master/plugins/inputs/statsd
 """
+from __future__ import annotations
+
+from typing import Literal
 
 import logging
 import socket
 
+StatsdMetricType = Literal[
+    b"g",  # gauge
+    b"c",  # counter
+    b"s",  # set
+    b"ms",  # timing
+    b"h",  # histogram
+    b"d",  # distribution
+]
+
 
 class StatsClient:
-    def __init__(self, host="127.0.0.1", port=8125, tags=None):
-        self.log = logging.getLogger("StatsClient")
-        self._dest_addr = (host, port)
-        self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self._tags = tags or {}
+    def __init__(
+        self,
+        host: str | None = "127.0.0.1",
+        port: int = 8125,
+        tags: dict[str, str] | None = None,
+    ) -> None:
+        self.log: logging.Logger = logging.getLogger("StatsClient")
+        self._dest_addr: tuple[str | None, int] = (host, port)
+        self._socket: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._tags: dict[str, str] = tags or {}
 
-    def gauge(self, metric, value, tags=None):
+    def gauge(
+        self,
+        metric: str,
+        value: int | float | str,
+        tags: dict[str, str] | None = None,
+    ) -> None:
         self._send(metric, b"g", value, tags)
 
-    def increase(self, metric, inc_value=1, tags=None):
+    def increase(
+        self,
+        metric: str,
+        inc_value: int | float = 1,
+        tags: dict[str, str] | None = None,
+    ) -> None:
         self._send(metric, b"c", inc_value, tags)
 
-    def timing(self, metric, value, tags=None):
+    def timing(
+        self,
+        metric: str,
+        value: int | float,
+        tags: dict[str, str] | None = None,
+    ) -> None:
         self._send(metric, b"ms", value, tags)
 
-    def unexpected_exception(self, ex, where, tags=None):
+    def unexpected_exception(
+        self,
+        ex: Exception,
+        where: str,
+        tags: dict[str, str] | None = None,
+    ) -> None:
         all_tags = {
             "exception": ex.__class__.__name__,
             "where": where,
@@ -38,7 +75,13 @@ class StatsClient:
         all_tags.update(tags or {})
         self.increase("exception", tags=all_tags)
 
-    def _send(self, metric, metric_type, value, tags):
+    def _send(
+        self,
+        metric: str,
+        metric_type: StatsdMetricType,
+        value: int | float | str,
+        tags: dict[str, str] | None,
+    ) -> None:
         if None in self._dest_addr:
             # stats sending is disabled
             return

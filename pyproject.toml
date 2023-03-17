@@ -37,7 +37,6 @@ exclude = [
     'pglookout/logutil.py',
     'pglookout/pglookout.py',
     'pglookout/pgutil.py',
-    'pglookout/statsd.py',
     'pglookout/version.py',
     'pglookout/webserver.py',
     # Tests.
