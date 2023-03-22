@@ -7,6 +7,7 @@ Copyright (c) 2014 F-Secure
 This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
+from __future__ import annotations
 
 from . import logutil
 from .common import get_iso_timestamp, parse_iso_datetime
@@ -14,10 +15,11 @@ from .pgutil import mask_connection_info
 from concurrent.futures import as_completed, ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from email.utils import parsedate
+from psycopg2.extensions import POLL_OK
 from psycopg2.extras import RealDictCursor
 from queue import Empty
 from threading import Thread
-from typing import List
+from typing import Any, Dict, TypedDict
 
 import datetime
 import errno
@@ -42,6 +44,54 @@ class ReplicationSlot:
     restart_lsn: str
     confirmed_flush_lsn: str
     state_data: str
+
+
+class ReplicationSlotAsDict(TypedDict, total=True):
+    slot_name: str
+    plugin: str
+    slot_type: str
+    database: str
+    catalog_xmin: str
+    restart_lsn: str
+    confirmed_flush_lsn: str
+    state_data: str
+
+
+class MemberState(TypedDict, total=False):
+    """Represents the state of a member of the cluster.
+
+    Note:
+        This is a very loose type as no key is mandatory. This is because
+        it is too dangerous to impose a stricter type until we have a
+        better test coverage, as it would change some behaviour in the
+        code (some unconventional behaviour was detected, and it may be a
+        bug or a feature).
+    """
+
+    # Connection Status
+    connection: bool
+    fetch_time: str
+    # Queried Status
+    db_time: str | datetime.datetime
+    pg_is_in_recovery: bool
+    pg_last_xact_replay_timestamp: datetime.datetime | None
+    pg_last_xlog_receive_location: str | None
+    pg_last_xlog_replay_location: str | None
+    # Replication info
+    replication_slots: list[ReplicationSlotAsDict]
+    replication_time_lag: float | None
+    min_replication_time_lag: float | None
+    replication_start_time: float | None
+
+
+# Note for future improvements:
+# If we want ObserverState to accept arbitrary keys, we have three choices:
+# - Use a different type (pydantic, dataclasses, etc.)
+# - Use a TypedDict for static keys (connection, fetch_time) and a sub-dict for
+#   dynamic keys (received from state.json).
+# - Wait for something like `allow_extra` to be implemented into TypedDict (unlikely)
+#   https://github.com/python/mypy/issues/4617
+ObserverState = Dict[str, Any]
 
 
 def wait_select(conn, timeout=5.0):
