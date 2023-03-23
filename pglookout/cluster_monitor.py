@@ -80,7 +80,7 @@ class MemberState(TypedDict, total=False):
     # Replication info
     replication_slots: list[ReplicationSlotAsDict]
     replication_time_lag: float | None
-    min_replication_time_lag: float | None
+    min_replication_time_lag: float
     replication_start_time: float | None
 
 
