@@ -11,6 +11,7 @@ See the file `LICENSE` for details.
 from __future__ import annotations
 
 from . import version
+from pglookout.default import JSON_STATE_FILE_PATH
 
 import argparse
 import json
@@ -43,7 +44,7 @@ def main(args: list[str] | None = None) -> int:
     try:
         with open(arg.state, "r") as fp:
             config = json.load(fp)
-        state_file_path = config.get("json_state_file_path", "/tmp/pglookout_state.json")  # pylint: disable=no-member
+        state_file_path = config.get("json_state_file_path", JSON_STATE_FILE_PATH)  # pylint: disable=no-member
         if time.monotonic() - os.stat(state_file_path).st_mtime > 60.0:
             # file older than one minute, pglookout probably dead, exit with minus one
             return -1

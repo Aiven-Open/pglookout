@@ -31,7 +31,6 @@ files = [
 exclude = [
     # Implementation.
     'pglookout/__main__.py',
-    'pglookout/pglookout.py',
     'pglookout/version.py',
     # Tests.
     'test/conftest.py',

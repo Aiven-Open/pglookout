@@ -15,7 +15,7 @@ from email.utils import parsedate
 from logging.handlers import SysLogHandler
 from pglookout import logutil
 from pglookout.common import get_iso_timestamp, parse_iso_datetime
-from pglookout.common_types import MemberState, ObserverState, ReplicationSlotAsDict
+from pglookout.common_types import MemberState, ObservedState, ReplicationSlotAsDict
 from pglookout.config import Config
 from pglookout.pgutil import mask_connection_info
 from pglookout.statsd import StatsClient
@@ -78,7 +78,7 @@ class ClusterMonitor(Thread):
         self,
         config: Config,
         cluster_state: dict[str, MemberState],
-        observer_state: dict[str, ObserverState],
+        observer_state: dict[str, ObservedState],
         create_alert_file: Callable[[str], None],
         cluster_monitor_check_queue: Queue[str],
         failover_decision_queue: Queue[str],
@@ -96,7 +96,7 @@ class ClusterMonitor(Thread):
         self.stats: StatsClient = stats
         self.running: bool = True
         self.cluster_state: dict[str, MemberState] = cluster_state
-        self.observer_state: dict[str, ObserverState] = observer_state
+        self.observer_state: dict[str, ObservedState] = observer_state
         self.config: Config = config
         self.create_alert_file: Callable[[str], None] = create_alert_file
         self.db_conns: dict[str, psycopg2.connection | None] = {}
@@ -152,7 +152,7 @@ class ClusterMonitor(Thread):
         self.db_conns[instance] = conn
         return conn
 
-    def _fetch_observer_state(self, instance: str, uri: str) -> ObserverState | None:
+    def _fetch_observer_state(self, instance: str, uri: str) -> ObservedState | None:
         now_iso = get_iso_timestamp()
         result = {"fetch_time": now_iso, "connection": True}
         fetch_uri = uri + "/state.json"
@@ -194,7 +194,7 @@ class ClusterMonitor(Thread):
             self.stats.unexpected_exception(ex, where="_fetch_observer_state")
             result["connection"] = False
 
-        return result
+        return cast(ObservedState, result)
 
     def fetch_observer_state(self, instance: str, uri: str) -> None:
         start_time = time.monotonic()

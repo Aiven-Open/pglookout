@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, TypedDict
+from typing import TypedDict, Union
 
 
 class ReplicationSlotAsDict(TypedDict, total=True):
@@ -44,10 +44,25 @@ class MemberState(TypedDict, total=False):
 
 
 # Note for future improvements:
-# If we want ObserverState to accept arbitrary keys, we have three choices:
+# If we want ObservedState to accept arbitrary keys, we have three choices:
 # - Use a different type (pydantic, dataclasses, etc.)
 # - Use a TypedDict for static keys (connection, fetch_time) and a sub-dict for
 #   dynamic keys (received from state.json).
 # - Wait for something like `allow_extra` to be implemented into TypedDict (unlikely)
 #   https://github.com/python/mypy/issues/4617
-ObserverState = Dict[str, Any]
+class ObservedState(dict[str, Union[MemberState, bool, str]]):
+    """Represents an observed state, from the perspective of an observer.
+
+    Note:
+        The content of this type is dynamic, as it depends on the number of
+        members in the cluster. There are two static keys, connection and
+        fetch_time, and N dynamic keys, one for each member of the cluster.
+        Like so::
+
+            connection: bool
+            fetch_time: str
+            name_or_ip_1: MemberState
+            name_or_ip_2: MemberState
+            ...
+            name_or_ip_N: MemberState
+    """

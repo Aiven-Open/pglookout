@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from packaging import version
 from pglookout import statsd
 from pglookout.cluster_monitor import ClusterMonitor
-from pglookout.common_types import MemberState, ObserverState
+from pglookout.common_types import MemberState, ObservedState
 from pglookout.config import Config
 from psycopg2.extras import RealDictCursor
 from queue import Queue
@@ -56,7 +56,7 @@ def test_main_loop(db: TestPG) -> None:
         "poll_observers_on_warning_only": True,
     }
     cluster_state: dict[str, MemberState] = {}
-    observer_state: dict[str, ObserverState] = {}
+    observer_state: dict[str, ObservedState] = {}
 
     def create_alert_file(arg: str) -> NoReturn:
         raise Exception(arg)
@@ -118,7 +118,7 @@ def test_fetch_replication_slot_info(db: TestPG) -> None:
         "poll_observers_on_warning_only": True,
     }
     cluster_state: dict[str, MemberState] = {}
-    observer_state: dict[str, ObserverState] = {}
+    observer_state: dict[str, ObservedState] = {}
 
     def create_alert_file(arg: str) -> NoReturn:
         raise Exception(arg)
