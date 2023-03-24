@@ -537,38 +537,93 @@ class PgLookout:
             if self.own_db and self.own_db != master_instance and self.config.get("autofollow"):
                 self.start_following_new_master(master_instance)
 
+        self._make_failover_decision(observer_state, standby_nodes, master_node)
+
+    def _make_failover_decision(
+        self,
+        observer_state: dict[str, ObservedState],
+        standby_nodes: dict[str, MemberState],
+        master_node: MemberState | None,
+    ) -> None:
+        assert self.own_db is not None
         own_state = self.cluster_state.get(self.own_db)
 
-        observer_info = ",".join(observer_state) or "no"
-        if self.own_db:  # Emit stats if we're a non-observer node
-            self.emit_stats(own_state)
-        else:  # We're an observer ourselves, grab the IP address from HTTP server address
-            observer_info = self.config.get("http_address", observer_info)
+        consider_failover = False
 
-        standby_info = ",".join(standby_nodes) or "no"
-        self.log.debug(
-            "Cluster has %s standbys, %s observers and %s as master, own_db: %r, own_state: %r",
-            standby_info,
-            observer_info,
-            self.current_master,
-            self.own_db,
-            own_state or "observer",
-        )
+        if not self.own_db:
+            self._log_state_when_own_db_is_not_in_cluster(
+                observer_state=observer_state,
+                standby_nodes=standby_nodes,
+            )
+        else:
+            assert own_state is not None
+            consider_failover = self._is_failover_consideration_needed(
+                own_state=own_state,
+                observer_state=observer_state,
+                standby_nodes=standby_nodes,
+                master_node=master_node,
+            )
 
-        if self.own_db:
-            if self.own_db == self.current_master:
-                # We are the master of this cluster, nothing to do
-                self.log.debug(
-                    "We %r: %r are still the master node: %r of this cluster, nothing to do.",
-                    self.own_db,
-                    own_state,
-                    master_node,
-                )
-                return
-            if not standby_nodes:
-                self.log.warning("No standby nodes set, master node: %r", master_node)
-                return
-            self.consider_failover(own_state, master_node, standby_nodes)
+        if consider_failover and own_state:
+            self.consider_failover(
+                own_state=own_state,
+                master_node=master_node,
+                standby_nodes=standby_nodes,
+            )
+
+    def _log_state_when_own_db_is_not_in_cluster(
+        self,
+        observer_state: dict[str, ObservedState],
+        standby_nodes: dict[str, MemberState],
+    ) -> None:
+        if self.log.isEnabledFor(DEBUG):
+            observer_info = self.config.get("http_address", ",".join(observer_state.keys()) or "no")
+            standby_info = ",".join(standby_nodes) or "no"
+            self.log.debug(
+                "Cluster has %s standbys, %s observers and %s as master, own_db: %r, own_state: %r",
+                standby_info,
+                observer_info,
+                self.current_master,
+                self.own_db,
+                "observer",
+            )
+
+    def _is_failover_consideration_needed(
+        self,
+        own_state: MemberState,
+        observer_state: dict[str, ObservedState],
+        standby_nodes: dict[str, MemberState],
+        master_node: MemberState | None,
+    ) -> bool:
+        self.emit_stats(own_state)  # Emit stats if we're a non-observer node
+
+        if self.log.isEnabledFor(DEBUG):
+            observer_info = ",".join(observer_state) or "no"
+            standby_info = ",".join(standby_nodes) or "no"
+            self.log.debug(
+                "Cluster has %s standbys, %s observers and %s as master, own_db: %r, own_state: %r",
+                standby_info,
+                observer_info,
+                self.current_master,
+                self.own_db,
+                own_state,
+            )
+
+        if self.own_db == self.current_master:
+            # We are the master of this cluster, nothing to do
+            self.log.debug(
+                "We %r: %r are still the master node: %r of this cluster, nothing to do.",
+                self.own_db,
+                own_state,
+                master_node,
+            )
+            return False
+
+        if not standby_nodes:
+            self.log.warning("No standby nodes set, master node: %r", master_node)
+            return False
+
+        return True
 
     def consider_failover(
         self,
