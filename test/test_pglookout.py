@@ -7,53 +7,58 @@ Copyright (c) 2014 F-Secure
 This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
-from pglookout.common import get_iso_timestamp
-from pglookout.pgutil import get_connection_info, get_connection_info_from_config_line
-from typing import Optional, Union
-from unittest.mock import patch
+from __future__ import annotations
 
-import datetime
+from datetime import datetime, timedelta
+from pathlib import Path
+from pglookout.common import get_iso_timestamp
+from pglookout.common_types import MemberState, ObservedState
+from pglookout.pglookout import PgLookout
+from pglookout.pgutil import get_connection_info, get_connection_info_from_config_line
+from psycopg2._psycopg import connection as pg_connection  # pylint: disable=no-name-in-module
+from typing import cast
+from unittest.mock import Mock, patch
+
 import json
 import os
 import pytest
 import time
 
 
-def test_connect_to_cluster_nodes_and_cleanup_old_nodes(pgl):
+def test_connect_to_cluster_nodes_and_cleanup_old_nodes(pgl: PgLookout) -> None:
+    assert pgl.cluster_monitor is not None
     pgl.cluster_monitor.db_conns = {
-        "1.2.3.4": "bar",
-        "2.3.4.5": "foo",
-        "3.4.5.6": "foo",
-        None: "foo",
+        "1.2.3.4": Mock(spec_set=pg_connection),
+        "2.3.4.5": Mock(spec_set=pg_connection),
+        "3.4.5.6": Mock(spec_set=pg_connection),
     }
     pgl.cluster_monitor.connect_to_cluster_nodes_and_cleanup_old_nodes()
     assert pgl.cluster_monitor.db_conns == {}
 
 
-def test_state_file_write(pgl, tmpdir):
-    state_file_path = tmpdir.join("state_file").strpath
-    pgl.config["json_state_file_path"] = state_file_path
+def test_state_file_write(pgl: PgLookout, tmp_path: Path) -> None:
+    state_file_path = tmp_path / "state_file"
+    pgl.config["json_state_file_path"] = str(state_file_path)
     pgl.write_cluster_state_to_json_file()
-    assert os.path.exists(state_file_path)
-    with open(state_file_path, "r") as fp:
-        state = json.load(fp)
+    assert state_file_path.is_file()
+    state = json.loads(state_file_path.read_text())
     assert isinstance(state, dict)
 
 
-def test_load_config(pgl):
+def test_load_config(pgl: PgLookout) -> None:
     pgl.own_db = "old_value"
     pgl.load_config()
     assert pgl.own_db == "1.2.3.4"
 
 
 def _create_db_node_state(
-    pg_last_xlog_receive_location=None,
-    pg_is_in_recovery=True,
-    connection=True,
-    replication_time_lag=None,
-    fetch_time=None,
-    db_time=None,
-):
+    pg_last_xlog_receive_location: str | None = None,
+    pg_is_in_recovery: bool = True,
+    connection: bool = True,
+    replication_time_lag: float | None = None,
+    fetch_time: datetime | None = None,
+    db_time: datetime | None = None,
+) -> MemberState:
     return {
         "connection": connection,
         "db_time": get_iso_timestamp(db_time),
@@ -68,16 +73,16 @@ def _create_db_node_state(
 
 
 def _add_to_observer_state(
-    pgl,
-    observer_name,
-    db_name,
-    pg_last_xlog_receive_location=None,
-    pg_is_in_recovery=True,
-    connection=True,
-    replication_time_lag=None,
-    fetch_time=None,
-    db_time=None,
-):
+    pgl: PgLookout,
+    observer_name: str,
+    db_name: str,
+    pg_last_xlog_receive_location: str | None = None,
+    pg_is_in_recovery: bool = True,
+    connection: bool = True,
+    replication_time_lag: float | None = None,
+    fetch_time: datetime | None = None,
+    db_time: datetime | None = None,
+) -> None:
     db_node_state = _create_db_node_state(
         pg_last_xlog_receive_location,
         pg_is_in_recovery,
@@ -86,28 +91,30 @@ def _add_to_observer_state(
         fetch_time=fetch_time,
         db_time=db_time,
     )
-    update_dict = {
-        "fetch_time": get_iso_timestamp(),
-        "connection": True,
-        db_name: db_node_state,
-    }
-    if observer_name in pgl.observer_state:
+    update_dict = ObservedState(
+        {
+            "fetch_time": get_iso_timestamp(),
+            "connection": True,
+            db_name: db_node_state,
+        }
+    )
+    if observer_name in pgl.observer_state.keys():
         pgl.observer_state[observer_name].update(update_dict)
     else:
         pgl.observer_state[observer_name] = update_dict
 
 
 def _add_db_to_cluster_state(
-    pgl,
-    instance,
-    pg_last_xlog_receive_location=None,
-    pg_is_in_recovery=True,
-    connection=True,
-    replication_time_lag=None,
-    fetch_time=None,
-    db_time=None,
-    conn_info=None,
-):
+    pgl: PgLookout,
+    instance: str,
+    pg_last_xlog_receive_location: str | None = None,
+    pg_is_in_recovery: bool = True,
+    connection: bool = True,
+    replication_time_lag: float | None = None,
+    fetch_time: datetime | None = None,
+    db_time: datetime | None = None,
+    conn_info: str | None = None,
+) -> None:
     db_node_state = _create_db_node_state(
         pg_last_xlog_receive_location,
         pg_is_in_recovery,
@@ -120,7 +127,7 @@ def _add_db_to_cluster_state(
     pgl.config["remote_conns"][instance] = conn_info or {"host": instance}
 
 
-def test_check_cluster_state_warning(pgl):
+def test_check_cluster_state_warning(pgl: PgLookout) -> None:
     _add_db_to_cluster_state(
         pgl,
         "kuu",
@@ -134,16 +141,16 @@ def test_check_cluster_state_warning(pgl):
     pgl.current_master = "old_master"
     pgl.own_db = "kuu"
     pgl.over_warning_limit_command = "fake_command"
-    pgl.execute_external_command.return_value = 0
+    cast(Mock, pgl.execute_external_command).return_value = 0
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 1
-    assert pgl.create_alert_file.call_count == 1
+    assert cast(Mock, pgl.execute_external_command).call_count == 1
+    assert cast(Mock, pgl.create_alert_file).call_count == 1
     pgl.check_cluster_state()
 
     # call count does not change when we have sent a single warning
-    assert pgl.execute_external_command.call_count == 1
+    assert cast(Mock, pgl.execute_external_command).call_count == 1
     assert pgl.replication_lag_over_warning_limit
-    assert pgl.create_alert_file.call_count == 1
+    assert cast(Mock, pgl.create_alert_file).call_count == 1
 
     # and then the replication catches up
     _add_db_to_cluster_state(
@@ -159,13 +166,13 @@ def test_check_cluster_state_warning(pgl):
     assert pgl.replication_lag_over_warning_limit is False
 
 
-def test_check_cluster_do_failover_one_standby(pgl):
+def test_check_cluster_do_failover_one_standby(pgl: PgLookout) -> None:
     _add_db_to_cluster_state(
         pgl,
         "old_master",
         pg_is_in_recovery=False,
         connection=False,
-        db_time=datetime.datetime(year=2014, month=1, day=1),
+        db_time=datetime(year=2014, month=1, day=1),
     )
 
     _add_db_to_cluster_state(
@@ -178,23 +185,23 @@ def test_check_cluster_do_failover_one_standby(pgl):
     )
 
     pgl.own_db = "own_db"
-    pgl.execute_external_command.return_value = 0
+    cast(Mock, pgl.execute_external_command).return_value = 0
     pgl.replication_lag_over_warning_limit = False
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 0
+    assert cast(Mock, pgl.execute_external_command).call_count == 0
     assert pgl.replication_lag_over_warning_limit is True
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 1
+    assert cast(Mock, pgl.execute_external_command).call_count == 1
     assert pgl.replication_lag_over_warning_limit is False
 
 
-def test_check_cluster_master_gone_one_standby_one_observer(pgl):
+def test_check_cluster_master_gone_one_standby_one_observer(pgl: PgLookout) -> None:
     _add_db_to_cluster_state(
         pgl,
         "old_master",
         pg_is_in_recovery=False,
         connection=False,
-        db_time=datetime.datetime(year=2014, month=1, day=1),
+        db_time=datetime(year=2014, month=1, day=1),
     )
 
     _add_db_to_cluster_state(
@@ -212,7 +219,7 @@ def test_check_cluster_master_gone_one_standby_one_observer(pgl):
         "old_master",
         pg_is_in_recovery=False,
         connection=False,
-        db_time=datetime.datetime(year=2014, month=1, day=1),
+        db_time=datetime(year=2014, month=1, day=1),
     )
     _add_to_observer_state(
         pgl,
@@ -226,7 +233,7 @@ def test_check_cluster_master_gone_one_standby_one_observer(pgl):
 
     # Simulate existing master connection
     pgl.current_master = "old_master"
-    pgl.execute_external_command.return_value = 0
+    cast(Mock, pgl.execute_external_command).return_value = 0
     pgl.replication_lag_over_warning_limit = False
 
     del pgl.config["remote_conns"]["old_master"]
@@ -237,23 +244,23 @@ def test_check_cluster_master_gone_one_standby_one_observer(pgl):
     # First call does not promote due to missing master because config has been updated just recently and there's
     # by default a grace period that's waited after list of known cluster nodes changes
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 0
+    assert cast(Mock, pgl.execute_external_command).call_count == 0
     assert pgl.replication_lag_over_warning_limit is False
 
     # If we say that master is known to be gone promotion will happen even though config was updated recently
     pgl.known_gone_nodes.append("old_master")
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 1
+    assert cast(Mock, pgl.execute_external_command).call_count == 1
     assert pgl.replication_lag_over_warning_limit is False
 
 
-def test_check_cluster_do_failover_one_standby_one_observer(pgl):
+def test_check_cluster_do_failover_one_standby_one_observer(pgl: PgLookout) -> None:
     _add_db_to_cluster_state(
         pgl,
         "old_master",
         pg_is_in_recovery=False,
         connection=False,
-        db_time=datetime.datetime(year=2014, month=1, day=1),
+        db_time=datetime(year=2014, month=1, day=1),
     )
 
     _add_db_to_cluster_state(
@@ -271,7 +278,7 @@ def test_check_cluster_do_failover_one_standby_one_observer(pgl):
         "old_master",
         pg_is_in_recovery=False,
         connection=False,
-        db_time=datetime.datetime(year=2014, month=1, day=1),
+        db_time=datetime(year=2014, month=1, day=1),
     )
     _add_to_observer_state(
         pgl,
@@ -283,23 +290,23 @@ def test_check_cluster_do_failover_one_standby_one_observer(pgl):
         replication_time_lag=130.0,
     )
 
-    pgl.execute_external_command.return_value = 0
+    cast(Mock, pgl.execute_external_command).return_value = 0
     pgl.replication_lag_over_warning_limit = False
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 0
+    assert cast(Mock, pgl.execute_external_command).call_count == 0
     assert pgl.replication_lag_over_warning_limit is True
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 1
+    assert cast(Mock, pgl.execute_external_command).call_count == 1
     assert pgl.replication_lag_over_warning_limit is False
 
 
-def test_check_cluster_do_failover_with_a_node_which_is_is_maintenance(pgl):
+def test_check_cluster_do_failover_with_a_node_which_is_is_maintenance(pgl: PgLookout) -> None:
     _add_db_to_cluster_state(
         pgl,
         "old_master",
         pg_is_in_recovery=False,
         connection=False,
-        db_time=datetime.datetime(year=2014, month=1, day=1),
+        db_time=datetime(year=2014, month=1, day=1),
     )
 
     _add_db_to_cluster_state(
@@ -313,16 +320,16 @@ def test_check_cluster_do_failover_with_a_node_which_is_is_maintenance(pgl):
 
     pgl.never_promote_these_nodes = []
     pgl.own_db = "kuu"
-    pgl.execute_external_command.return_value = 0
+    cast(Mock, pgl.execute_external_command).return_value = 0
     pgl.replication_lag_over_warning_limit = True
-    pgl.check_for_maintenance_mode_file.return_value = True
+    cast(Mock, pgl.check_for_maintenance_mode_file).return_value = True
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 0
+    assert cast(Mock, pgl.execute_external_command).call_count == 0
     assert pgl.replication_lag_over_warning_limit is True
-    assert pgl.check_for_maintenance_mode_file.call_count == 1
+    assert cast(Mock, pgl.check_for_maintenance_mode_file).call_count == 1
 
 
-def test_check_cluster_do_failover_with_a_node_which_should_never_be_promoted(pgl):
+def test_check_cluster_do_failover_with_a_node_which_should_never_be_promoted(pgl: PgLookout) -> None:
     _add_db_to_cluster_state(pgl, "old_master", pg_is_in_recovery=False, connection=False)
 
     _add_db_to_cluster_state(
@@ -335,14 +342,14 @@ def test_check_cluster_do_failover_with_a_node_which_should_never_be_promoted(pg
     )
     pgl.never_promote_these_nodes = ["kuu"]
     pgl.own_db = "kuu"
-    pgl.execute_external_command.return_value = 0
+    cast(Mock, pgl.execute_external_command).return_value = 0
     pgl.replication_lag_over_warning_limit = True
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 0
+    assert cast(Mock, pgl.execute_external_command).call_count == 0
     assert pgl.replication_lag_over_warning_limit is True
 
 
-def test_check_cluster_do_failover_two_standbys(pgl):
+def test_check_cluster_do_failover_two_standbys(pgl: PgLookout) -> None:
     _add_db_to_cluster_state(pgl, "old_master", pg_is_in_recovery=False, connection=False)
 
     _add_db_to_cluster_state(
@@ -364,22 +371,22 @@ def test_check_cluster_do_failover_two_standbys(pgl):
         replication_time_lag=130.0,
     )
 
-    pgl.execute_external_command.return_value = 0
+    cast(Mock, pgl.execute_external_command).return_value = 0
     pgl.replication_lag_over_warning_limit = True
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 0
+    assert cast(Mock, pgl.execute_external_command).call_count == 0
     assert pgl.replication_lag_over_warning_limit is True  # we keep the warning on
 
 
 def test_check_cluster_do_failover_two_standbys_when_the_one_ahead_can_never_be_promoted(
-    pgl,
-):
+    pgl: PgLookout,
+) -> None:
     _add_db_to_cluster_state(
         pgl,
         "old_master",
         pg_is_in_recovery=False,
         connection=False,
-        db_time=datetime.datetime(year=2014, month=1, day=1),
+        db_time=datetime(year=2014, month=1, day=1),
     )
 
     _add_db_to_cluster_state(
@@ -401,14 +408,14 @@ def test_check_cluster_do_failover_two_standbys_when_the_one_ahead_can_never_be_
         replication_time_lag=130.0,
     )
     pgl.never_promote_these_nodes = ["puu"]
-    pgl.execute_external_command.return_value = 0
+    cast(Mock, pgl.execute_external_command).return_value = 0
     pgl.replication_lag_over_warning_limit = True
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 1
+    assert cast(Mock, pgl.execute_external_command).call_count == 1
     assert pgl.replication_lag_over_warning_limit is False
 
 
-def test_failover_with_no_master_anymore(pgl):
+def test_failover_with_no_master_anymore(pgl: PgLookout) -> None:
     # this should trigger an immediate failover as we have two
     # standbys online but we've never seen a master
     pgl.own_db = "kuu"
@@ -429,12 +436,12 @@ def test_failover_with_no_master_anymore(pgl):
         replication_time_lag=1,
     )
 
-    pgl.execute_external_command.return_value = 0
+    cast(Mock, pgl.execute_external_command).return_value = 0
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 1
+    assert cast(Mock, pgl.execute_external_command).call_count == 1
 
 
-def test_failover_over_replication_lag_when_still_connected_to_master(pgl):
+def test_failover_over_replication_lag_when_still_connected_to_master(pgl: PgLookout) -> None:
     _add_db_to_cluster_state(pgl, "old_master", pg_is_in_recovery=False, connection=False)
 
     # We will make our own node to be the furthest along so we get considered for promotion
@@ -449,13 +456,13 @@ def test_failover_over_replication_lag_when_still_connected_to_master(pgl):
     pgl.own_db = "kuu"
 
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 0
+    assert cast(Mock, pgl.execute_external_command).call_count == 0
     assert pgl.replication_lag_over_warning_limit is True  # we keep the warning on
 
 
 def test_failover_over_replication_lag_with_one_observer_one_standby_no_connections(
-    pgl,
-):
+    pgl: PgLookout,
+) -> None:
     _add_db_to_cluster_state(pgl, "old_master", pg_is_in_recovery=False, connection=False)
 
     # We will make our own node to be the furthest along so we get considered for promotion
@@ -475,7 +482,7 @@ def test_failover_over_replication_lag_with_one_observer_one_standby_no_connecti
         "old_master",
         pg_is_in_recovery=False,
         connection=False,
-        db_time=datetime.datetime(year=2014, month=1, day=1),
+        db_time=datetime(year=2014, month=1, day=1),
     )
     _add_to_observer_state(
         pgl,
@@ -488,11 +495,11 @@ def test_failover_over_replication_lag_with_one_observer_one_standby_no_connecti
     )
     pgl.observer_state["observer"]["connection"] = False
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 0
+    assert cast(Mock, pgl.execute_external_command).call_count == 0
     assert pgl.replication_lag_over_warning_limit is True  # we keep the warning on
 
 
-def test_cluster_state_when_observer_has_also_non_members_of_our_current_cluster(pgl):
+def test_cluster_state_when_observer_has_also_non_members_of_our_current_cluster(pgl: PgLookout) -> None:
     _add_db_to_cluster_state(pgl, "old_master", pg_is_in_recovery=False, connection=True)
 
     # We will make our own node to be the furthest along so we get considered for promotion
@@ -512,7 +519,7 @@ def test_cluster_state_when_observer_has_also_non_members_of_our_current_cluster
         "old_master",
         pg_is_in_recovery=False,
         connection=False,
-        db_time=datetime.datetime(year=2014, month=1, day=1),
+        db_time=datetime(year=2014, month=1, day=1),
     )
     _add_to_observer_state(
         pgl,
@@ -537,7 +544,7 @@ def test_cluster_state_when_observer_has_also_non_members_of_our_current_cluster
     assert "old_master" in pgl.connected_master_nodes
 
 
-def test_failover_no_connections(pgl):
+def test_failover_no_connections(pgl: PgLookout) -> None:
     _add_db_to_cluster_state(pgl, "old_master", pg_is_in_recovery=False, connection=False)
 
     # We will make our own node to be the furthest along so we get considered for promotion
@@ -561,17 +568,17 @@ def test_failover_no_connections(pgl):
         replication_time_lag=130.0,
     )
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 0
+    assert cast(Mock, pgl.execute_external_command).call_count == 0
     assert pgl.replication_lag_over_warning_limit is True  # we keep the warning on
 
 
-def test_failover_master_two_standbys_one_observer_no_connection_between_standbys(pgl):
+def test_failover_master_two_standbys_one_observer_no_connection_between_standbys(pgl: PgLookout) -> None:
     _add_db_to_cluster_state(
         pgl,
         "old_master",
         pg_is_in_recovery=False,
         connection=False,
-        db_time=datetime.datetime(year=2014, month=1, day=1),
+        db_time=datetime(year=2014, month=1, day=1),
     )
     # We will make our own node to be the furthest along so we get considered for promotion
     _add_db_to_cluster_state(
@@ -600,7 +607,7 @@ def test_failover_master_two_standbys_one_observer_no_connection_between_standby
         "old_master",
         pg_is_in_recovery=False,
         connection=False,
-        db_time=datetime.datetime(year=2014, month=1, day=1),
+        db_time=datetime(year=2014, month=1, day=1),
     )
     _add_to_observer_state(
         pgl,
@@ -620,17 +627,17 @@ def test_failover_master_two_standbys_one_observer_no_connection_between_standby
         connection=True,
         replication_time_lag=130.0,
     )
-    pgl.execute_external_command.return_value = 0
+    cast(Mock, pgl.execute_external_command).return_value = 0
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 0
+    assert cast(Mock, pgl.execute_external_command).call_count == 0
     assert pgl.replication_lag_over_warning_limit is True
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 1
+    assert cast(Mock, pgl.execute_external_command).call_count == 1
 
     assert pgl.replication_lag_over_warning_limit is False
 
 
-def test_failover_master_one_standby_one_observer_no_connections(pgl):
+def test_failover_master_one_standby_one_observer_no_connections(pgl: PgLookout) -> None:
     pgl.own_db = "own"
 
     # Add observer state
@@ -649,7 +656,7 @@ def test_failover_master_one_standby_one_observer_no_connections(pgl):
 
     pgl.check_cluster_state()
     assert pgl.replication_lag_over_warning_limit is True  # we keep the warning on
-    assert pgl.execute_external_command.call_count == 0
+    assert cast(Mock, pgl.execute_external_command).call_count == 0
 
     # Add observer state
     _add_to_observer_state(pgl, "observer", "old_master", pg_is_in_recovery=False, connection=True)
@@ -675,7 +682,7 @@ def test_failover_master_one_standby_one_observer_no_connections(pgl):
     pgl.check_cluster_state()
 
     # No failover yet
-    assert pgl.execute_external_command.call_count == 0
+    assert cast(Mock, pgl.execute_external_command).call_count == 0
     assert pgl.replication_lag_over_warning_limit is True  # we keep the warning on
 
     # observer state
@@ -685,7 +692,7 @@ def test_failover_master_one_standby_one_observer_no_connections(pgl):
         "old_master",
         pg_is_in_recovery=False,
         connection=False,
-        db_time=datetime.datetime(year=2014, month=1, day=1),
+        db_time=datetime(year=2014, month=1, day=1),
     )
     _add_to_observer_state(
         pgl,
@@ -702,14 +709,14 @@ def test_failover_master_one_standby_one_observer_no_connections(pgl):
         "old_master",
         pg_is_in_recovery=False,
         connection=False,
-        db_time=datetime.datetime(year=2014, month=1, day=1),
+        db_time=datetime(year=2014, month=1, day=1),
     )
     # now do failover
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 1
+    assert cast(Mock, pgl.execute_external_command).call_count == 1
 
 
-def test_find_current_master(pgl):
+def test_find_current_master(pgl: PgLookout) -> None:
     _add_db_to_cluster_state(pgl, "master", pg_is_in_recovery=False, connection=True)
     # We will make our own node to be the furthest along so we get considered for promotion
     _add_db_to_cluster_state(
@@ -725,13 +732,13 @@ def test_find_current_master(pgl):
     assert pgl.current_master == "master"
 
 
-def test_two_standby_failover_and_autofollow(pgl, tmpdir):
+def test_two_standby_failover_and_autofollow(pgl: PgLookout, tmp_path: Path) -> None:
     _add_db_to_cluster_state(
         pgl,
         "old_master",
         pg_is_in_recovery=False,
         connection=False,
-        fetch_time=datetime.datetime(year=2014, month=1, day=1),
+        fetch_time=datetime(year=2014, month=1, day=1),
     )
     # We will make our own node to be the furthest from master so we don't get considered for promotion
     _add_db_to_cluster_state(
@@ -754,7 +761,7 @@ def test_two_standby_failover_and_autofollow(pgl, tmpdir):
     pgl.check_cluster_state()
 
     assert pgl.replication_lag_over_warning_limit is True  # we keep the warning on
-    assert pgl.execute_external_command.call_count == 0
+    assert cast(Mock, pgl.execute_external_command).call_count == 0
     assert pgl.current_master == "old_master"
 
     _add_db_to_cluster_state(
@@ -767,29 +774,26 @@ def test_two_standby_failover_and_autofollow(pgl, tmpdir):
         conn_info={"host": "otherhost.example.com", "port": 11111},
     )
 
-    pg_data_dir = tmpdir.join("test_pgdata").strpath
-    os.makedirs(pg_data_dir)
+    pg_data_dir = tmp_path / "test_pgdata"
+    pg_data_dir.mkdir(parents=True, exist_ok=True)
     primary_conninfo = (
         "user=replication password=vjsh8l7sv4a902y1tsdz "
         "host=old_master port=5432 "
         "sslmode=prefer sslcompression=1 krbsrvname=postgres"
     )
     old_recovery_conf = f"standby_mode = 'on'\nprimary_conninfo = '{primary_conninfo}'\n"
-    with open(os.path.join(pg_data_dir, "recovery.conf"), "w") as fp:
-        fp.write(old_recovery_conf)
+    (pg_data_dir / "recovery.conf").write_text(old_recovery_conf)
 
-    pgl.config["pg_data_directory"] = pg_data_dir
+    pgl.config["pg_data_directory"] = str(pg_data_dir)
     pgl.config["autofollow"] = True
     pgl.primary_conninfo_template = get_connection_info(primary_conninfo)
 
-    with open(os.path.join(pg_data_dir, "PG_VERSION"), "w") as fp:
-        fp.write("11\n")
+    (pg_data_dir / "PG_VERSION").write_text("11\n")
 
     pgl.check_cluster_state()
     assert pgl.current_master == "other"
 
-    with open(os.path.join(pg_data_dir, "recovery.conf"), "r") as fp:
-        new_lines = fp.read().splitlines()
+    new_lines = (pg_data_dir / "recovery.conf").read_text().splitlines()
     assert new_lines.pop(0).startswith("# pglookout updated primary_conninfo")
     assert new_lines.pop(0) == "standby_mode = 'on'"
     assert new_lines[0].startswith("primary_conninfo = ")
@@ -801,8 +805,8 @@ def test_two_standby_failover_and_autofollow(pgl, tmpdir):
     assert new_conn_info == dict(old_conn_info, host="otherhost.example.com", port="11111")
 
 
-def test_replication_positions(pgl):
-    standby_nodes = {
+def test_replication_positions(pgl: PgLookout) -> None:
+    standby_nodes: dict[str, MemberState] = {
         "10.255.255.10": {
             "connection": True,
             "db_time": "2014-08-28T14:09:57.919301+00:00Z",
@@ -814,24 +818,31 @@ def test_replication_positions(pgl):
             "replication_time_lag": 254.341944,
         },
     }
+
     # the above node shouldn't show up as its fetch_time is (way) older than 20 seconds
-    positions = {}
+    positions: dict[int, set[str]] = {}
     assert pgl.get_replication_positions(standby_nodes) == positions
     standby_nodes["10.255.255.10"]["fetch_time"] = get_iso_timestamp()
-    positions[0x9000090] = set(["10.255.255.10"])
+    positions[0x9000090] = {"10.255.255.10"}
     assert pgl.get_replication_positions(standby_nodes) == positions
+
     # add another standby, further ahead
-    standby_nodes["10.255.255.11"] = dict(standby_nodes["10.255.255.10"], pg_last_xlog_receive_location="1/0000AAAA")
-    positions[1 << 32 | 0xAAAA] = set(["10.255.255.11"])
+    standby_nodes["10.255.255.11"] = cast(
+        MemberState, dict(standby_nodes["10.255.255.10"], pg_last_xlog_receive_location="1/0000AAAA")
+    )
+    positions[1 << 32 | 0xAAAA] = {"10.255.255.11"}
     assert pgl.get_replication_positions(standby_nodes) == positions
+
     # add another standby which hasn't received anything
-    standby_nodes["10.255.255.12"] = dict(standby_nodes["10.255.255.10"], pg_last_xlog_receive_location=None)
+    standby_nodes["10.255.255.12"] = cast(
+        MemberState, dict(standby_nodes["10.255.255.10"], pg_last_xlog_receive_location=None)
+    )
     positions[0x9000090].add("10.255.255.12")
     assert pgl.get_replication_positions(standby_nodes) == positions
 
 
-def test_node_map(pgl):
-    cluster_state = {
+def test_node_map(pgl: PgLookout) -> None:
+    cluster_state: dict[str, MemberState] = {
         "10.255.255.10": {
             "connection": True,
             "db_time": "2014-08-28T14:26:51.067084+00:00Z",
@@ -848,38 +859,40 @@ def test_node_map(pgl):
         },
     }
     observer_state = {
-        "10.255.255.11": {
-            "10.255.255.10": {
+        "10.255.255.11": ObservedState(
+            {
+                "10.255.255.10": {
+                    "connection": True,
+                    "db_time": "2014-08-28T14:26:47.105901+00:00Z",
+                    "fetch_time": "2014-08-28T14:26:47.104849Z",
+                    "pg_is_in_recovery": False,
+                    "pg_last_xact_replay_timestamp": "2014-08-28T14:05:43.577357+00:00Z",
+                    "pg_last_xlog_receive_location": "0/9000090",
+                    "pg_last_xlog_replay_location": "0/9000090",
+                    "replication_time_lag": 1263.528544,
+                },
+                "10.255.255.9": {
+                    "connection": False,
+                    "db_time": "2014-08-28T14:06:15.172820+00:00Z",
+                    "fetch_time": "2014-08-28T14:26:47.107115Z",
+                    "pg_is_in_recovery": False,
+                    "pg_last_xact_replay_timestamp": None,
+                    "pg_last_xlog_receive_location": None,
+                    "pg_last_xlog_replay_location": None,
+                },
                 "connection": True,
-                "db_time": "2014-08-28T14:26:47.105901+00:00Z",
-                "fetch_time": "2014-08-28T14:26:47.104849Z",
-                "pg_is_in_recovery": False,
-                "pg_last_xact_replay_timestamp": "2014-08-28T14:05:43.577357+00:00Z",
-                "pg_last_xlog_receive_location": "0/9000090",
-                "pg_last_xlog_replay_location": "0/9000090",
-                "replication_time_lag": 1263.528544,
-            },
-            "10.255.255.9": {
-                "connection": False,
-                "db_time": "2014-08-28T14:06:15.172820+00:00Z",
-                "fetch_time": "2014-08-28T14:26:47.107115Z",
-                "pg_is_in_recovery": False,
-                "pg_last_xact_replay_timestamp": None,
-                "pg_last_xlog_receive_location": None,
-                "pg_last_xlog_replay_location": None,
-            },
-            "connection": True,
-            "fetch_time": "2014-08-28T14:26:51.069891Z",
-        }
+                "fetch_time": "2014-08-28T14:26:51.069891Z",
+            }
+        )
     }
     master_host, _, standby_nodes = pgl.create_node_map(cluster_state, observer_state)
     assert master_host == "10.255.255.10"
     assert standby_nodes == {}
 
 
-def test_node_map_disconnected_current_master(pgl):
+def test_node_map_disconnected_current_master(pgl: PgLookout) -> None:
     pgl.current_master = "10.255.255.7"
-    cluster_state = {
+    cluster_state: dict[str, MemberState] = {
         "10.255.255.7": {
             "connection": False,
             "db_time": "2014-09-07T15:26:23.957151+00:00Z",
@@ -900,14 +913,14 @@ def test_node_map_disconnected_current_master(pgl):
             "replication_time_lag": 43.586525,
         },
     }
-    observer_state = {}
+    observer_state: dict[str, ObservedState] = {}
     master_host, _, standby_nodes = pgl.create_node_map(cluster_state, observer_state)
     assert master_host == "10.255.255.7"
     assert list(standby_nodes.keys())[0] == "10.255.255.8"
 
 
-def test_standbys_failover_equal_replication_positions(pgl):
-    now = datetime.datetime.utcnow()
+def test_standbys_failover_equal_replication_positions(pgl: PgLookout) -> None:
+    now = datetime.utcnow()
     _add_db_to_cluster_state(
         pgl,
         instance="192.168.54.183",
@@ -926,8 +939,8 @@ def test_standbys_failover_equal_replication_positions(pgl):
         pg_is_in_recovery=False,
         connection=False,
         replication_time_lag=0.0,
-        fetch_time=now - datetime.timedelta(seconds=3600),
-        db_time=now - datetime.timedelta(seconds=3600),
+        fetch_time=now - timedelta(seconds=3600),
+        db_time=now - timedelta(seconds=3600),
         conn_info="foobar",
     )
     _add_db_to_cluster_state(
@@ -947,15 +960,15 @@ def test_standbys_failover_equal_replication_positions(pgl):
     # highest standby currently.
     pgl.own_db = "192.168.54.183"
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 0
+    assert cast(Mock, pgl.execute_external_command).call_count == 0
     # If we're the highest we should see call_count increment
     pgl.own_db = "192.168.63.4"
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 1
+    assert cast(Mock, pgl.execute_external_command).call_count == 1
 
 
-def test_node_map_when_only_observer_sees_master(pgl):
-    cluster_state = {
+def test_node_map_when_only_observer_sees_master(pgl: PgLookout) -> None:
+    cluster_state: dict[str, MemberState] = {
         "10.255.255.10": {
             "connection": False,
             "db_time": "2014-08-28T14:26:51.067084+00:00Z",
@@ -967,21 +980,23 @@ def test_node_map_when_only_observer_sees_master(pgl):
             "replication_time_lag": 1267.489727,
         },
     }
-    observer_state = {
-        "10.255.255.11": {
-            "10.255.255.10": {
+    observer_state: dict[str, ObservedState] = {
+        "10.255.255.11": ObservedState(
+            {
+                "10.255.255.10": {
+                    "connection": True,
+                    "db_time": "2014-08-28T14:26:47.105901+00:00Z",
+                    "fetch_time": "2014-08-28T14:26:50.104849Z",
+                    "pg_is_in_recovery": False,
+                    "pg_last_xact_replay_timestamp": "2014-08-28T14:05:43.577357+00:00Z",
+                    "pg_last_xlog_receive_location": "0/9000090",
+                    "pg_last_xlog_replay_location": "0/9000090",
+                    "replication_time_lag": 1263.528544,
+                },
                 "connection": True,
-                "db_time": "2014-08-28T14:26:47.105901+00:00Z",
-                "fetch_time": "2014-08-28T14:26:50.104849Z",
-                "pg_is_in_recovery": False,
-                "pg_last_xact_replay_timestamp": "2014-08-28T14:05:43.577357+00:00Z",
-                "pg_last_xlog_receive_location": "0/9000090",
-                "pg_last_xlog_replay_location": "0/9000090",
-                "replication_time_lag": 1263.528544,
-            },
-            "connection": True,
-            "fetch_time": "2014-08-28T14:26:51.069891Z",
-        }
+                "fetch_time": "2014-08-28T14:26:51.069891Z",
+            }
+        )
     }
     master_instance, _, _ = pgl.create_node_map(cluster_state, observer_state)
     assert master_instance == "10.255.255.10"
@@ -989,7 +1004,7 @@ def test_node_map_when_only_observer_sees_master(pgl):
     assert master_instance in pgl.connected_master_nodes
 
 
-def test_poll_observers_on_warning_only(pgl):
+def test_poll_observers_on_warning_only(pgl: PgLookout) -> None:
     pgl.config["poll_observers_on_warning_only"] = True
     pgl.config["observers"] = {"local": "URL"}
     pgl.own_db = "kuu"
@@ -998,7 +1013,7 @@ def test_poll_observers_on_warning_only(pgl):
         "master",
         pg_is_in_recovery=False,
         connection=True,
-        db_time=datetime.datetime.min,
+        db_time=datetime.min,
     )
     _add_db_to_cluster_state(
         pgl,
@@ -1010,7 +1025,7 @@ def test_poll_observers_on_warning_only(pgl):
     pgl.check_cluster_state()
     assert "master" not in pgl.disconnected_master_nodes
     assert "master" in pgl.connected_master_nodes
-    assert pgl.execute_external_command.call_count == 0
+    assert cast(Mock, pgl.execute_external_command).call_count == 0
     assert pgl.replication_lag_over_warning_limit
     assert pgl.observer_state_newer_than is not None
 
@@ -1019,7 +1034,7 @@ def test_poll_observers_on_warning_only(pgl):
         "master",
         pg_is_in_recovery=False,
         connection=False,
-        db_time=datetime.datetime.min,
+        db_time=datetime.min,
     )
     _add_db_to_cluster_state(
         pgl,
@@ -1034,17 +1049,17 @@ def test_poll_observers_on_warning_only(pgl):
         "master",
         pg_is_in_recovery=False,
         connection=False,
-        db_time=datetime.datetime.min,
+        db_time=datetime.min,
     )
     pgl.check_cluster_state()
     # this check makes sure we did not skip doing checks because db_poll_inteval has
     # pass but because observer data is available and create_node_map was called
     assert "master" in pgl.disconnected_master_nodes
-    assert pgl.execute_external_command.call_count == 1
+    assert cast(Mock, pgl.execute_external_command).call_count == 1
 
 
 @pytest.mark.parametrize(
-    "start_time_offset, last_run_offset, timeout_configured, signaled",
+    ("start_time_offset", "last_run_offset", "timeout_configured", "signaled"),
     [
         # timeout disabled, should never alert
         (None, None, "null", False),
@@ -1080,12 +1095,13 @@ def test_poll_observers_on_warning_only(pgl):
     ],
 )
 def test_check_cluster_monitor_health(
-    pgl,
-    start_time_offset: Optional[float],
-    last_run_offset: Optional[float],
-    timeout_configured: Optional[Union[float, str]],
+    pgl: PgLookout,
+    start_time_offset: float | None,
+    last_run_offset: float | None,
+    timeout_configured: float | str | None,
     signaled: bool,
 ) -> None:
+    assert pgl.cluster_monitor is not None
     now = time.monotonic()
     if timeout_configured is not None:
         if timeout_configured == "null":

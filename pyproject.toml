@@ -34,7 +34,6 @@ exclude = [
     'pglookout/version.py',
     # Tests.
     'test/conftest.py',
-    'test/test_lookout.py',
     # Other.
     'setup.py',
     'version.py',

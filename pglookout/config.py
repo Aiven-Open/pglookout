@@ -13,7 +13,7 @@ class Statsd(TypedDict, total=False):
 class Config(TypedDict, total=False):
     alert_file_dir: str
     autofollow: bool
-    cluster_monitor_health_timeout_seconds: float
+    cluster_monitor_health_timeout_seconds: float | None
     db_poll_interval: float
     failover_command: str
     failover_sleep_time: float
