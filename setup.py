@@ -1,12 +1,12 @@
-from setuptools import setup, find_packages
-import os
+# Copyright (c) 2023 Aiven, Helsinki, Finland. https://aiven.io/
+from pathlib import Path
+from setuptools import find_packages, setup
+
 import sys
 import version
 
-
-readme_path = os.path.join(os.path.dirname(__file__), "README.rst")
-with open(readme_path, "r") as fp:
-    readme_text = fp.read()
+readme_path = Path(__file__).parent / "README.rst"
+readme_text = readme_path.read_text()
 
 
 version_for_setup_py = version.get_project_version("pglookout/version.py")
