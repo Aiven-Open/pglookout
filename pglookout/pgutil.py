@@ -7,7 +7,7 @@ See LICENSE for details
 """
 from __future__ import annotations
 
-from typing import cast, Literal, TypedDict
+from typing import cast, Literal, TypedDict, Union
 from urllib.parse import parse_qs, urlparse  # pylint: disable=no-name-in-module, import-error
 
 import psycopg2.extensions
@@ -74,11 +74,15 @@ class ConnectionParameterKeywords(TypedDict, total=False):
     target_session_attrs: Literal["any", "read-write", "read-only", "primary", "standby", "prefer-standby"]
 
 
+#: Type alias for allowed connection info types.
+ConnectionInfo = Union[DsnDict, DsnDictDeprecated, ConnectionParameterKeywords]
+
+
 def create_connection_string(connection_info: DsnDict | DsnDictDeprecated | ConnectionParameterKeywords) -> str:
     return str(psycopg2.extensions.make_dsn(**connection_info))
 
 
-def mask_connection_info(info: str) -> str:
+def mask_connection_info(info: str | ConnectionInfo) -> str:
     masked_info = get_connection_info(info)
     password = masked_info.pop("password", None)
     connection_string = create_connection_string(masked_info)
@@ -92,9 +96,7 @@ def get_connection_info_from_config_line(line: str) -> ConnectionParameterKeywor
     return get_connection_info(value)
 
 
-def get_connection_info(
-    info: str | DsnDict | DsnDictDeprecated | ConnectionParameterKeywords,
-) -> ConnectionParameterKeywords:
+def get_connection_info(info: str | ConnectionInfo) -> ConnectionParameterKeywords:
     """Get a normalized connection info dict from a connection string or a dict.
 
     Supports both the traditional libpq format and the new url format.

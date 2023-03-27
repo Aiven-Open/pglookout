@@ -1,6 +1,7 @@
 # Copyright (c) 2023 Aiven, Helsinki, Finland. https://aiven.io/
 from __future__ import annotations
 
+from pglookout.pgutil import ConnectionInfo
 from typing import Literal, TypedDict
 
 
@@ -34,7 +35,7 @@ class Config(TypedDict, total=False):
     pg_stop_command: str
     poll_observers_on_warning_only: bool
     primary_conninfo_template: str
-    remote_conns: dict[str, str]  # instance name -> dsn
+    remote_conns: dict[str, ConnectionInfo]
     replication_catchup_timeout: float
     replication_state_check_interval: float
     statsd: Statsd

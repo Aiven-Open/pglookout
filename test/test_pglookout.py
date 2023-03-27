@@ -14,7 +14,7 @@ from pathlib import Path
 from pglookout.common import get_iso_timestamp
 from pglookout.common_types import MemberState, ObservedState
 from pglookout.pglookout import PgLookout
-from pglookout.pgutil import get_connection_info, get_connection_info_from_config_line
+from pglookout.pgutil import ConnectionInfo, DsnDict, get_connection_info, get_connection_info_from_config_line
 from psycopg2._psycopg import connection as pg_connection  # pylint: disable=no-name-in-module
 from typing import cast
 from unittest.mock import Mock, patch
@@ -113,7 +113,7 @@ def _add_db_to_cluster_state(
     replication_time_lag: float | None = None,
     fetch_time: datetime | None = None,
     db_time: datetime | None = None,
-    conn_info: str | None = None,
+    conn_info: ConnectionInfo | None = None,
 ) -> None:
     db_node_state = _create_db_node_state(
         pg_last_xlog_receive_location,
@@ -124,7 +124,7 @@ def _add_db_to_cluster_state(
         db_time=db_time,
     )
     pgl.cluster_state[instance] = db_node_state
-    pgl.config["remote_conns"][instance] = conn_info or {"host": instance}
+    pgl.config["remote_conns"][instance] = get_connection_info(conn_info or cast(DsnDict, {"host": instance}))
 
 
 def test_check_cluster_state_warning(pgl: PgLookout) -> None:
@@ -930,7 +930,6 @@ def test_standbys_failover_equal_replication_positions(pgl: PgLookout) -> None:
         replication_time_lag=400.435871,
         fetch_time=now,
         db_time=now,
-        conn_info="foobar",
     )
     _add_db_to_cluster_state(
         pgl,
@@ -941,7 +940,6 @@ def test_standbys_failover_equal_replication_positions(pgl: PgLookout) -> None:
         replication_time_lag=0.0,
         fetch_time=now - timedelta(seconds=3600),
         db_time=now - timedelta(seconds=3600),
-        conn_info="foobar",
     )
     _add_db_to_cluster_state(
         pgl,
@@ -952,7 +950,6 @@ def test_standbys_failover_equal_replication_positions(pgl: PgLookout) -> None:
         replication_time_lag=401.104655,
         fetch_time=now,
         db_time=now,
-        conn_info="foobar",
     )
 
     pgl.current_master = "192.168.57.180"

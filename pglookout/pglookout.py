@@ -45,7 +45,7 @@ from signal import SIGHUP, SIGINT, signal, SIGTERM
 from socket import gethostname
 from subprocess import CalledProcessError, check_call
 from types import FrameType
-from typing import cast, Final, Optional
+from typing import Any, cast, Final, Optional
 
 import json
 import sys
@@ -169,13 +169,29 @@ class PgLookout:
         )
         self.load_config()
 
+    @staticmethod
+    def normalize_config(config: dict[str, Any]) -> Config:
+        """Normalize the config to a known format.
+
+        Warning:
+            This method does not give any guarantees about the validity of the config.
+
+        Note:
+            A better approach would be to use a schema to validate the config, or
+            tu use something like ``pydantic`` or ``dataclasses`` to define the config.
+        """
+        if "remote_conns" in config:
+            config["remote_conns"] = {name: get_connection_info(info) for name, info in config["remote_conns"].items()}
+
+        return cast(Config, config)
+
     def load_config(self) -> None:
         self.log.debug("Loading JSON config from: %r", self.config_path)
 
         previous_remote_conns = self.config.get("remote_conns")
         try:
-            with self.config_path.open() as fp:
-                self.config = json.load(fp)
+            config = json.loads(self.config_path.read_text())
+            self.config = self.normalize_config(config)
         except Exception as ex:  # pylint: disable=broad-except
             self.log.exception("Invalid JSON config, exiting")
             self.stats.unexpected_exception(ex, where="load_config")

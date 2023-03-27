@@ -17,7 +17,7 @@ from pglookout import logutil
 from pglookout.common import get_iso_timestamp, parse_iso_datetime
 from pglookout.common_types import MemberState, ObservedState, ReplicationSlotAsDict
 from pglookout.config import Config
-from pglookout.pgutil import mask_connection_info
+from pglookout.pgutil import ConnectionInfo, create_connection_string, mask_connection_info
 from pglookout.statsd import StatsClient
 from psycopg2.extensions import POLL_OK, POLL_READ, POLL_WRITE
 from psycopg2.extras import RealDictCursor, RealDictRow
@@ -115,7 +115,7 @@ class ClusterMonitor(Thread):
         self.last_monitoring_success_time: float | None = None
         self.log.debug("Initialized ClusterMonitor with: %r", cluster_state)
 
-    def _connect_to_db(self, instance: str, dsn: str | None) -> psycopg2.connection | None:
+    def _connect_to_db(self, instance: str, dsn: ConnectionInfo | None) -> psycopg2.connection | None:
         conn = self.db_conns.get(instance)
 
         if conn:
@@ -130,7 +130,8 @@ class ClusterMonitor(Thread):
 
         try:
             self.log.info("Connecting to %s", inst_info_str)
-            conn = psycopg2.connect(dsn=dsn, async_=True)
+            dsn_string = create_connection_string(dsn)
+            conn = psycopg2.connect(dsn=dsn_string, async_=True)
             wait_select(conn)
             self.log.debug("Connected to %s", inst_info_str)
         except (PglookoutTimeout, psycopg2.OperationalError) as ex:
@@ -259,7 +260,7 @@ class ClusterMonitor(Thread):
         result: MemberState = {"fetch_time": get_iso_timestamp(), "connection": False}
 
         if not db_conn:
-            dsn: str | None = self.config["remote_conns"].get(instance)
+            dsn: ConnectionInfo | None = self.config["remote_conns"].get(instance)
             db_conn = self._connect_to_db(instance, dsn)
             if not db_conn:
                 return result
