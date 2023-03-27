@@ -12,7 +12,7 @@ from __future__ import annotations
 from argparse import ArgumentParser
 from copy import deepcopy
 from datetime import datetime, timedelta
-from logging import DEBUG, getLevelNamesMapping, getLogger, Logger
+from logging import _nameToLevel, DEBUG, getLogger, Logger
 from logging.handlers import SysLogHandler
 from packaging.version import parse as parse_version
 from pathlib import Path
@@ -52,7 +52,7 @@ import sys
 import time
 
 DEFAULT_LOG_LEVEL: Final[str] = "DEBUG"
-LOG_LEVEL_NAMES_MAPPING: Final[dict[str, int]] = getLevelNamesMapping()
+LOG_LEVEL_NAMES_MAPPING: Final[dict[str, int]] = deepcopy(_nameToLevel)
 
 
 class PgLookout:
