@@ -15,7 +15,7 @@ import os
 
 with_systemd: bool = False
 try:
-    from systemd import daemon  # pylint: disable=no-name-in-module
+    from systemd import daemon
 
     with_systemd = True
 except ImportError:

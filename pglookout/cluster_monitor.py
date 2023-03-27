@@ -178,9 +178,9 @@ class ClusterMonitor(Thread):
                     instance,
                     time_diff,
                     response.json(),
-                )  # pylint: disable=no-member
+                )
                 return None
-            result.update(response.json())  # pylint: disable=no-member
+            result.update(response.json())
         except requests.ConnectionError as ex:
             self.log.warning(
                 "%s (%s) fetching state from observer: %r, %r",
@@ -347,7 +347,6 @@ class ClusterMonitor(Thread):
             return "SELECT txid_current(), pg_current_wal_lsn() AS pg_last_xlog_replay_location"
         return "SELECT txid_current(), pg_current_xlog_location() AS pg_last_xlog_replay_location"
 
-    # FIXME: Find a tighter input + return type
     @staticmethod
     def _parse_status_query_result(result: MemberState) -> MemberState:
         if not result:

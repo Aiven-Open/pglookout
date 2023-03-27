@@ -190,7 +190,7 @@ class PgLookout:
 
         previous_remote_conns = self.config.get("remote_conns")
         try:
-            config = json.loads(self.config_path.read_text())
+            config = json.loads(self.config_path.read_text(encoding="utf-8"))
             self.config = self.normalize_config(config)
         except Exception as ex:  # pylint: disable=broad-except
             self.log.exception("Invalid JSON config, exiting")
@@ -282,7 +282,7 @@ class PgLookout:
             )
 
             state_file_path_tmp = state_file_path.with_name(f"{state_file_path.name}.tmp")
-            state_file_path_tmp.write_text(json_to_dump)
+            state_file_path_tmp.write_text(json_to_dump, encoding="utf-8")
             state_file_path_tmp.rename(state_file_path)
 
             self.log.debug(
@@ -452,7 +452,7 @@ class PgLookout:
 
         return master_instance, master_node, standby_nodes
 
-    def is_restoring_or_catching_up_normally(self, state: MemberState) -> bool:
+    def _is_restoring_or_catching_up_normally(self, state: MemberState) -> bool:
         """
         Return True if node is still in the replication catchup phase and
         replication lag alerts/metrics should not yet be generated.
@@ -476,7 +476,7 @@ class PgLookout:
         return False
 
     def emit_stats(self, state: MemberState) -> None:
-        if self.is_restoring_or_catching_up_normally(state):
+        if self._is_restoring_or_catching_up_normally(state):
             # do not emit misleading lag stats during catchup at restore
             return
 
@@ -484,7 +484,7 @@ class PgLookout:
         if replication_time_lag is not None:
             self.stats.gauge("pg.replication_lag", replication_time_lag)
 
-    def is_master_observer_new_enough(self, observer_state: dict[str, ObservedState]) -> bool:
+    def _is_master_observer_new_enough(self, observer_state: dict[str, ObservedState]) -> bool:
         if not self.replication_lag_over_warning_limit:
             return True
 
@@ -536,7 +536,7 @@ class PgLookout:
             )
             return
 
-        if self.config.get("poll_observers_on_warning_only") and not self.is_master_observer_new_enough(observer_state):
+        if self.config.get("poll_observers_on_warning_only") and not self._is_master_observer_new_enough(observer_state):
             self.log.warning("observer data is not good enough, skipping check")
             return
 
@@ -551,7 +551,7 @@ class PgLookout:
             )
             self.current_master = master_instance
             if self.own_db and self.own_db != master_instance and self.config.get("autofollow"):
-                self.start_following_new_master(master_instance)
+                self._start_following_new_master(master_instance)
 
         self._make_failover_decision(observer_state, standby_nodes, master_node)
 
@@ -685,7 +685,7 @@ class PgLookout:
         return self.replication_lag_over_warning_limit
 
     def check_replication_lag(self, own_state: MemberState, standby_nodes: dict[str, MemberState]) -> None:
-        if self.is_restoring_or_catching_up_normally(own_state):
+        if self._is_restoring_or_catching_up_normally(own_state):
             # do not raise alerts during catchup at restore
             return
 
@@ -749,8 +749,7 @@ class PgLookout:
                 node_state["connection"]
                 and now - parse_iso_datetime(node_state["fetch_time"]) < timedelta(seconds=20)
                 and instance not in self.never_promote_these_nodes
-            ):  # noqa # pylint: disable=line-too-long
-                # use pg_last_xlog_receive_location if it's available,
+            ):  # use pg_last_xlog_receive_location if it's available,
                 # otherwise fall back to pg_last_xlog_replay_location but
                 # note that both of them can be None.  We prefer
                 # receive_location over replay_location as some nodes may
@@ -870,7 +869,7 @@ class PgLookout:
                 furthest_along_instance,
             )
 
-    def modify_recovery_conf_to_point_at_new_master(self, new_master_instance: str) -> bool:
+    def _modify_recovery_conf_to_point_at_new_master(self, new_master_instance: str) -> bool:
         pg_data_directory = Path(self.config.get("pg_data_directory", PG_DATA_DIRECTORY))
         pg_version = (pg_data_directory / "PG_VERSION").read_text().strip()
 
@@ -940,9 +939,9 @@ class PgLookout:
 
         return True
 
-    def start_following_new_master(self, new_master_instance: str) -> None:
+    def _start_following_new_master(self, new_master_instance: str) -> None:
         start_time = time.monotonic()
-        updated_config = self.modify_recovery_conf_to_point_at_new_master(new_master_instance)
+        updated_config = self._modify_recovery_conf_to_point_at_new_master(new_master_instance)
         if not updated_config:
             self.log.info(
                 "Already following master %r, no need to start following it again",
@@ -979,7 +978,7 @@ class PgLookout:
                 err.output,
             )
             self.stats.unexpected_exception(err, where="execute_external_command")
-            return_code = err.returncode  # pylint: disable=no-member
+            return_code = err.returncode
         self.log.warning("Executed external command: %r, output: %r", return_code, output)
         return return_code
 
@@ -1028,8 +1027,7 @@ class PgLookout:
         if "cluster_monitor_health_timeout_seconds" in self.config:
             config_value = self.config.get("cluster_monitor_health_timeout_seconds")
             return config_value if config_value is None else float(config_value)
-        else:
-            return self._get_check_interval() * 2
+        return self._get_check_interval() * 2
 
     def _get_check_interval(self) -> float:
         return float(self.config.get("replication_state_check_interval", 5.0))

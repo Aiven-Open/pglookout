@@ -8,7 +8,7 @@ See LICENSE for details
 from __future__ import annotations
 
 from typing import cast, Literal, TypedDict, Union
-from urllib.parse import parse_qs, urlparse  # pylint: disable=no-name-in-module, import-error
+from urllib.parse import parse_qs, urlparse
 
 import psycopg2.extensions
 
@@ -131,7 +131,9 @@ def parse_connection_string_url(url: str) -> ConnectionParameterKeywords:
     return cast(ConnectionParameterKeywords, fields)
 
 
-def parse_connection_string_libpq(connection_string: str) -> ConnectionParameterKeywords:
+def parse_connection_string_libpq(
+    connection_string: str,
+) -> ConnectionParameterKeywords:
     """Parse a postgresql connection string.
 
     See:
@@ -159,7 +161,7 @@ def parse_connection_string_libpq(connection_string: str) -> ConnectionParameter
                     value += rem[i]
             else:
                 raise ValueError(f"invalid connection_string fragment {rem!r}")
-            connection_string = rem[i + 1 :]  # pylint: disable=undefined-loop-variable
+            connection_string = rem[i + 1 :]
         else:
             res = rem.split(None, 1)
             if len(res) > 1:
