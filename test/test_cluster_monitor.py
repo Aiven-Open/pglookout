@@ -12,6 +12,7 @@ from pglookout import statsd
 from pglookout.cluster_monitor import ClusterMonitor
 from pglookout.common_types import MemberState, ObservedState
 from pglookout.config import Config
+from pglookout.pgutil import create_connection_string
 from psycopg2.extras import RealDictCursor
 from queue import Queue
 from typing import NoReturn
@@ -49,8 +50,8 @@ def test_replication_lag() -> None:
 def test_main_loop(db: TestPG) -> None:
     config: Config = {
         "remote_conns": {
-            "test1db": db.connection_string("testuser"),
-            "test2db": db.connection_string("otheruser"),
+            "test1db": db.connection_dict("testuser"),
+            "test2db": db.connection_dict("otheruser"),
         },
         "observers": {"local": "URL"},
         "poll_observers_on_warning_only": True,
@@ -111,8 +112,8 @@ def test_fetch_replication_slot_info(db: TestPG) -> None:
 
     config: Config = {
         "remote_conns": {
-            "test1db": db.connection_string("testuser"),
-            "test2db": db.connection_string("otheruser"),
+            "test1db": db.connection_dict("testuser"),
+            "test2db": db.connection_dict("otheruser"),
         },
         "observers": {"local": "URL"},
         "poll_observers_on_warning_only": True,
@@ -138,7 +139,7 @@ def test_fetch_replication_slot_info(db: TestPG) -> None:
     )
     cm.main_monitoring_loop(requested_check=True)
 
-    with closing(psycopg2.connect(db.connection_string(), connect_timeout=15)) as conn:
+    with closing(psycopg2.connect(create_connection_string(db.connection_dict()), connect_timeout=15)) as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute("SELECT pg_catalog.pg_create_logical_replication_slot('testslot1', 'test_decoding')")
 

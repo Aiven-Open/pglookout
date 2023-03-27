@@ -30,10 +30,6 @@ files = [
     'version.py',
     'setup.py',
 ]
-exclude = [
-    # Tests.
-    'test/conftest.py',
-]
 
 [[tool.mypy.overrides]]
 module = "test.test_cluster_monitor"
