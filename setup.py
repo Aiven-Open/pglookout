@@ -2,7 +2,6 @@
 from pathlib import Path
 from setuptools import find_packages, setup
 
-import sys
 import version
 
 readme_path = Path(__file__).parent / "README.rst"
@@ -17,9 +16,6 @@ requires = [
     "psycopg2 >= 2.0.0",
     "requests >= 1.2.0",
 ]
-
-if sys.version_info[0] == 2:
-    requires.append("futures")
 
 
 setup(
