@@ -27,16 +27,13 @@ strict = true
 files = [
     'pglookout/',
     'test/',
+    'version.py',
 ]
 exclude = [
-    # Implementation.
-    'pglookout/__main__.py',
-    'pglookout/version.py',
     # Tests.
     'test/conftest.py',
     # Other.
     'setup.py',
-    'version.py',
 ]
 
 [[tool.mypy.overrides]]
