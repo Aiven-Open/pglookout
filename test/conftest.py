@@ -108,7 +108,7 @@ class TestPG:
         while (self.pg.poll() is None) and (time.monotonic() < timeout):
             time.sleep(0.1)
         if not force and self.pg.poll() is None:
-            raise Exception(f"PG pid {self.pg.pid} not dead")
+            raise TimeoutError(f"PG pid {self.pg.pid} not dead")
 
 
 @pytest.fixture(scope="session")

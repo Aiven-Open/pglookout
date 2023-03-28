@@ -523,7 +523,6 @@ class PgLookout:
         return True
 
     def check_cluster_state(self) -> None:
-        # master_node = None
         cluster_state = deepcopy(self.cluster_state)
         observer_state = deepcopy(self.observer_state)
         configured_node_count = len(self.config.get("remote_conns", {}))

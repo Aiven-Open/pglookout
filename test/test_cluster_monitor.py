@@ -24,6 +24,10 @@ import pytest
 import time
 
 
+class AlertFileCreatedException(Exception):
+    pass
+
+
 def test_replication_lag() -> None:
     # pylint: disable=protected-access
     now = datetime.now()
@@ -60,7 +64,7 @@ def test_main_loop(db: TestPG) -> None:
     observer_state: dict[str, ObservedState] = {}
 
     def create_alert_file(arg: str) -> NoReturn:
-        raise Exception(arg)
+        raise AlertFileCreatedException(arg)
 
     cluster_monitor_check_queue: Queue[str] = Queue()
     failover_decision_queue: Queue[str] = Queue()
@@ -122,7 +126,7 @@ def test_fetch_replication_slot_info(db: TestPG) -> None:
     observer_state: dict[str, ObservedState] = {}
 
     def create_alert_file(arg: str) -> NoReturn:
-        raise Exception(arg)
+        raise AlertFileCreatedException(arg)
 
     cluster_monitor_check_queue: Queue[str] = Queue()
     failover_decision_queue: Queue[str] = Queue()
