@@ -85,7 +85,7 @@ disable = [
 
 [tool.pylint.'FORMAT']
 max-line-length = 125
-max-module-lines = 1200
+max-module-lines = 1300
 
 [tool.pylint.'REPORTS']
 output-format = 'text'

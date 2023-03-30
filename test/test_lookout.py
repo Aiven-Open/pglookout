@@ -7,7 +7,9 @@ Copyright (c) 2014 F-Secure
 This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
+from pathlib import Path
 from pglookout.common import get_iso_timestamp
+from pglookout.pglookout import PgLookout
 from pglookout.pgutil import get_connection_info, get_connection_info_from_config_line
 from typing import Optional, Union
 from unittest.mock import patch
@@ -1144,3 +1146,67 @@ def test_check_cluster_monitor_health(
             increase.assert_called_once_with("cluster_monitor_health_timeout")
         else:
             increase.assert_not_called()
+
+
+def test_apply_stale_config_restarts(
+    pgl: PgLookout,
+    tmpdir: Path,
+) -> None:
+    pg_data_dir = tmpdir / "test_pgdata"
+    os.makedirs(str(pg_data_dir))
+    with open(os.path.join(pg_data_dir, "PG_VERSION"), "w") as fp:
+        fp.write("15\n")
+
+    primary_conninfo = "user=replicator password=fake_pass sslmode=require host=primary"
+    old_recovery_conf = f"standby_mode = 'on'\nprimary_conninfo = '{primary_conninfo}'\n"
+    recovery_file_path = pg_data_dir / "postgresql.auto.conf"
+    with open(recovery_file_path, "w") as fp:
+        fp.write(old_recovery_conf)
+
+    pgl.config["pg_data_directory"] = str(pg_data_dir)
+    pgl.config["autofollow"] = True
+    pgl.current_master = "primary"
+    pgl.own_db = "secondary"
+    pgl.primary_conninfo_template = "user=replicator password=fake_pass sslmode=require"
+    _add_db_to_cluster_state(
+        pgl,
+        "primary",
+        pg_is_in_recovery=False,
+        connection=True,
+        db_time=datetime.datetime.utcnow(),
+    )
+    _add_db_to_cluster_state(
+        pgl,
+        "secondary",
+        pg_is_in_recovery=True,
+        connection=True,
+        db_time=datetime.datetime.utcnow(),
+    )
+
+    # assert baseline after construction
+    assert pgl._config_version == 1  # pylint: disable=protected-access
+    assert pgl._config_version_applied == 0  # pylint: disable=protected-access
+
+    # apply first version, should not restart
+    pgl._apply_latest_config_version()  # pylint: disable=protected-access
+    assert pgl._config_version == 1  # pylint: disable=protected-access
+    assert pgl._config_version_applied == 1  # pylint: disable=protected-access
+    assert pgl.execute_external_command.call_count == 0
+
+    # changing the password but not increasing the config_version must not trigger an action
+    pgl.primary_conninfo_template = "user=replication password=foo sslmode=require"
+    pgl._config_version = 1  # pylint: disable=protected-access
+    assert pgl.execute_external_command.call_count == 0
+    assert pgl._config_version == 1  # pylint: disable=protected-access
+    assert pgl._config_version_applied == 1  # pylint: disable=protected-access
+
+    # after updating the version we may now apply the new version
+    pgl._config_version = 2  # pylint: disable=protected-access
+    pgl._apply_latest_config_version()  # pylint: disable=protected-access
+    assert pgl._config_version == 2  # pylint: disable=protected-access
+    assert pgl._config_version_applied == 2  # pylint: disable=protected-access
+    assert pgl.execute_external_command.call_count == 2
+
+    # check that the recovery file contains the new password
+    with open(recovery_file_path, "r") as fp:
+        assert "primary_conninfo = 'user=replication password=foo sslmode=require" in fp.read()
