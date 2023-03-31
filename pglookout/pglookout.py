@@ -452,16 +452,17 @@ class PgLookout:
             self.consider_failover(own_state, master_node, standby_nodes)
 
     def consider_failover(self, own_state, master_node, standby_nodes):
-        if not master_node:
+        if not master_node or not master_node.get("connection"):
             # no master node at all in the cluster?
             self.log.warning(
-                "No master node in cluster, %r standby nodes exist, "
+                "No reachable master node in cluster, %r standby nodes exist, "
                 "%.2f seconds since last cluster config update, failover timeout set "
-                "to %r seconds, previous master: %r",
+                "to %r seconds, previous master: %r, master_node: %r",
                 len(standby_nodes),
                 time.monotonic() - self.cluster_nodes_change_time,
                 self.replication_lag_failover_timeout,
                 self.current_master,
+                master_node,
             )
             if self.current_master:
                 self.cluster_monitor_check_queue.put("Master is missing, ask for immediate state check")
@@ -470,11 +471,13 @@ class PgLookout:
                 config_timeout_exceeded = (now - self.cluster_nodes_change_time) >= self.missing_master_from_config_timeout
                 if master_known_to_be_gone or config_timeout_exceeded:
                     # we've seen a master at some point in time, but now it's
-                    # missing, perform an immediate failover to promote one of
-                    # the standbys
-                    self.log.warning(
-                        "Performing failover decision because existing master node disappeared from configuration"
-                    )
+                    # not reachable or removed from configuration, perform an
+                    # immediate failover to promote one of the standbys
+                    if master_known_to_be_gone:
+                        reason = "master got removed from configuration"
+                    else:
+                        reason = "master node is not reachable"
+                    self.log.warning("Performing failover decision because %s", reason)
                     self.do_failover_decision(own_state, standby_nodes)
                     return
             else:
