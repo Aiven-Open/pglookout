@@ -8,7 +8,6 @@ Source0:        pglookout-rpm-src.tar
 Obsoletes:      python3-pglookout
 Requires:       python3-packaging, python3-psycopg2, python3-requests, python3-setuptools, systemd-python3, systemd
 BuildRequires:  python3-packaging, python3-psycopg2, python3-requests, python3-setuptools, systemd-python3, systemd
-BuildRequires:  python3-pytest, python3-pylint
 BuildArch:      noarch
 
 %description
@@ -26,10 +25,6 @@ to promote a new primary in case the previous one goes missing.
 python3 setup.py install --prefix=%{_prefix} --root=%{buildroot}
 sed -e "s@#!/bin/python@#!%{_bindir}/python@" -i %{buildroot}%{_bindir}/*
 %{__install} -Dm0644 pglookout.unit %{buildroot}%{_unitdir}/pglookout.service
-
-
-%check
-make test PYTHON=python3
 
 
 %files

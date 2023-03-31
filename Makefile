@@ -13,40 +13,44 @@ pglookout/version.py: version.py
 
 test: mypy flake8 pylint unittest
 
-unittest: $(generated)
+test-dep:
+	$(PYTHON) -m pip install -r requirements.dev.txt
+	touch $@
+
+unittest: $(generated) test-dep
 	$(PYTHON) -m pytest
 
-mypy: $(generated)
+mypy: $(generated) test-dep
 	MYPYPATH=stubs $(PYTHON) -m mypy
 
-flake8: $(generated)
+flake8: $(generated) test-dep
 	$(PYTHON) -m flake8 $(PYTHON_SOURCE_DIRS)
 
-pylint: $(generated)
+pylint: $(generated) test-dep
 	$(PYTHON) -m pylint $(PYTHON_SOURCE_DIRS)
 
-fmt: $(generated)
+fmt: $(generated) test-dep
 	isort $(PYTHON_SOURCE_DIRS)
 	black $(PYTHON_SOURCE_DIRS)
 
-fmt-check: $(generated)
+fmt-check: $(generated) test-dep
 	isort --check $(PYTHON_SOURCE_DIRS)
 	black --check $(PYTHON_SOURCE_DIRS)
 
-coverage:
+coverage: test-dep
 	$(PYTHON) -m pytest $(PYTEST_ARG) --cov-report term-missing --cov-branch \
 		--cov-report xml:coverage.xml --cov pglookout test/
 
 clean:
 	$(RM) -r *.egg-info/ build/ dist/
-	$(RM) ../pglookout_* test-*.xml $(generated)
+	$(RM) ../pglookout_* test-*.xml $(generated) test-dep
 
-deb: $(generated)
+deb: $(generated) test
 	cp debian/changelog.in debian/changelog
 	dch -v $(long_ver) "Automatically built package"
 	dpkg-buildpackage -A -uc -us
 
-rpm: $(generated)
+rpm: $(generated) test
 	git archive --output=pglookout-rpm-src.tar --prefix=pglookout/ HEAD
 	# add generated files to the tar, they're not in git repository
 	tar -r -f pglookout-rpm-src.tar --transform=s,pglookout/,pglookout/pglookout/, $(generated)
@@ -62,7 +66,7 @@ build-dep-fed:
 		python3-devel python3-pytest python3-pylint \
 		python3-mock python3-psycopg2 \
 		python3-requests rpm-build systemd-python3 \
-		python3-flake8 python3-pytest-cov python3-packaging
+		python3-flake8 python3-pytest-cov python3-packaging python-mypy
 
 build-dep-deb:
 	sudo apt-get install \
