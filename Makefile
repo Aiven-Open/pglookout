@@ -2,6 +2,8 @@ short_ver = 2.1.0
 long_ver = $(shell git describe --long 2>/dev/null || echo $(short_ver)-0-unknown-g`git describe --always`)
 generated = pglookout/version.py
 
+VENV = .venv-test
+VENV_PYTHON = $(VENV)/bin/python
 PYTHON ?= python3
 PYTHON_SOURCE_DIRS = pglookout/ test/ stubs/ version.py setup.py
 
@@ -11,35 +13,45 @@ all: $(generated)
 pglookout/version.py: version.py
 	$(PYTHON) $^ $@
 
-test: mypy flake8 pylint unittest
+# This venv is only used for tests and development. It has access to system site packages, because pglookout
+# would need them to run. Development deps are kept in this venv, so that they don't interfere with the
+# system python.
+$(VENV):
+	$(PYTHON) -m venv --system-site-packages $(VENV)
+	$(VENV)/bin/pip install -r requirements.dev.txt
 
-unittest: $(generated)
-	$(PYTHON) -m pytest
+local-install: $(VENV)
+	$(VENV_PYTHON) -m pip install -e .
 
-mypy: $(generated)
-	MYPYPATH=stubs $(PYTHON) -m mypy
+test: mypy flake8 pylint unittest fmt-check
 
-flake8: $(generated)
-	$(PYTHON) -m flake8 $(PYTHON_SOURCE_DIRS)
+unittest: $(generated) $(VENV)
+	$(VENV_PYTHON) -m pytest
 
-pylint: $(generated)
-	$(PYTHON) -m pylint $(PYTHON_SOURCE_DIRS)
+mypy: $(generated) $(VENV)
+	MYPYPATH=stubs $(VENV_PYTHON) -m mypy
 
-fmt: $(generated)
-	isort $(PYTHON_SOURCE_DIRS)
-	black $(PYTHON_SOURCE_DIRS)
+flake8: $(generated) $(VENV)
+	$(VENV_PYTHON) -m flake8 $(PYTHON_SOURCE_DIRS)
 
-fmt-check: $(generated)
-	isort --check $(PYTHON_SOURCE_DIRS)
-	black --check $(PYTHON_SOURCE_DIRS)
+pylint: $(generated) $(VENV)
+	$(VENV_PYTHON) -m pylint $(PYTHON_SOURCE_DIRS)
 
-coverage:
-	$(PYTHON) -m pytest $(PYTEST_ARG) --cov-report term-missing --cov-branch \
+fmt: $(generated) $(VENV)
+	$(VENV_PYTHON) -m isort $(PYTHON_SOURCE_DIRS)
+	$(VENV_PYTHON) -m black $(PYTHON_SOURCE_DIRS)
+
+fmt-check: $(generated) $(VENV)
+	$(VENV_PYTHON) -m isort --check $(PYTHON_SOURCE_DIRS)
+	$(VENV_PYTHON) -m black --check $(PYTHON_SOURCE_DIRS)
+
+coverage: $(VENV)
+	$(VENV_PYTHON) -m pytest $(PYTEST_ARG) --cov-report term-missing --cov-branch \
 		--cov-report xml:coverage.xml --cov pglookout test/
 
 clean:
-	$(RM) -r *.egg-info/ build/ dist/
-	$(RM) ../pglookout_* test-*.xml $(generated)
+	$(RM) -r *.egg-info/ build/ dist/ $(VENV) .hypothesis
+	$(RM) ../pglookout_* test-*.xml $(generated) .coverage coverage.xml
 
 deb: $(generated)
 	cp debian/changelog.in debian/changelog
@@ -59,10 +71,8 @@ rpm: $(generated)
 
 build-dep-fed:
 	sudo dnf -y install --best --allowerasing \
-		python3-devel python3-pytest python3-pylint \
-		python3-mock python3-psycopg2 \
-		python3-requests rpm-build systemd-python3 \
-		python3-flake8 python3-pytest-cov python3-packaging
+		python3-devel python3-psycopg2 python3-requests \
+		rpm-build systemd-python3 python3-packaging
 
 build-dep-deb:
 	sudo apt-get install \
@@ -70,4 +80,4 @@ build-dep-deb:
 		python3-all python3-setuptools python3-psycopg2 python3-requests \
 		python3-packaging
 
-.PHONY: rpm
+.PHONY: rpm local-install

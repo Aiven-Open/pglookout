@@ -28,9 +28,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - id: dependencies
-        run: |
-          pip install -e .
-          pip install -r requirements.dev.txt
+        run: make local-install
 
       - id: mypy
         run: make mypy
