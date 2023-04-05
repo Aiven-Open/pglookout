@@ -27,60 +27,23 @@ strict = true
 files = [
     'pglookout/',
     'test/',
+    './*.py',
 ]
-exclude = [
-    # Implementation.
-    'pglookout/__main__.py',
-    'pglookout/cluster_monitor.py',
-    'pglookout/common.py',
-    'pglookout/current_master.py',
-    'pglookout/logutil.py',
-    'pglookout/pglookout.py',
-    'pglookout/pgutil.py',
-    'pglookout/statsd.py',
-    'pglookout/version.py',
-    'pglookout/webserver.py',
-    # Tests.
-    'test/conftest.py',
-    'test/test_cluster_monitor.py',
-    'test/test_common.py',
-    'test/test_lookout.py',
-    'test/test_pgutil.py',
-    'test/test_webserver.py',
-    # Other.
-    'setup.py',
-    'version.py',
-]
-
 
 [tool.pylint.'MESSAGES CONTROL']
+enable = [
+    'useless-suppression',
+]
 disable = [
-    'bad-option-value',
     'duplicate-code',
     'fixme',
-    'import-outside-toplevel',
     'invalid-name',
-    'len-as-condition',
-    'locally-disabled',
     'missing-docstring',
-    'no-else-raise',
-    'no-else-return',
-    'no-self-use',
-    'raise-missing-from',
-    'too-few-public-methods',
-    'too-many-ancestors',
-    'too-many-arguments',
-    'too-many-boolean-expressions',
     'too-many-branches',
-    'too-many-function-args',
     'too-many-instance-attributes',
     'too-many-locals',
-    'too-many-public-methods',
     'too-many-statements',
-    'ungrouped-imports',
-    'unspecified-encoding',
     'wrong-import-order',
-    'wrong-import-position',
 ]
 
 [tool.pylint.'FORMAT']
@@ -93,3 +56,7 @@ reports = 'no'
 
 [tool.pylint.'TYPECHECK']
 extension-pkg-whitelist = 'pydantic'
+
+[tool.pylint.'DESIGN']
+max-args = 10
+max-attributes = 10

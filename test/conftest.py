@@ -4,32 +4,37 @@ pglookout - test configuration
 Copyright (c) 2016 Ohmu Ltd
 See LICENSE for details
 """
-from pglookout import logutil, pgutil
+# pylint: disable=protected-access
+from __future__ import annotations
+
+from pathlib import Path
+from pglookout import logutil
 from pglookout.pglookout import PgLookout
-from py import path as py_path  # pylint: disable=no-name-in-module
-from unittest.mock import Mock
+from pglookout.pgutil import DsnDict
+from textwrap import dedent
+from typing import cast, Final, Generator
+from unittest.mock import Mock, patch
 
 import os
 import pytest
 import signal
 import subprocess
-import tempfile
 import time
 
-PG_VERSIONS = ["15", "14", "13", "12", "11", "10"]
+PG_VERSIONS: Final[list[str]] = ["15", "14", "13", "12", "11", "10"]
 
 logutil.configure_logging()
 
 
 @pytest.fixture
-def pgl():
+def pgl() -> Generator[PgLookout, None, None]:
     pgl_ = PgLookout("pglookout.json")
+    assert pgl_.cluster_monitor is not None
     pgl_.config["remote_conns"] = {}
-    pgl_.check_for_maintenance_mode_file = Mock()
-    pgl_.check_for_maintenance_mode_file.return_value = False
-    pgl_.cluster_monitor._connect_to_db = Mock()  # pylint: disable=protected-access
-    pgl_.create_alert_file = Mock()
-    pgl_.execute_external_command = Mock()
+    pgl_.check_for_maintenance_mode_file = Mock(return_value=False)  # type: ignore[method-assign]
+    pgl_.cluster_monitor._connect_to_db = Mock()  # type: ignore[method-assign]
+    pgl_.create_alert_file = Mock()  # type: ignore[method-assign]
+    pgl_.execute_external_command = Mock()  # type: ignore[method-assign]
     try:
         yield pgl_
     finally:
@@ -37,52 +42,51 @@ def pgl():
 
 
 class TestPG:
-    def __init__(self, pgdata):
-        self.pgbin = self.find_pgbin()
-        self.pgdata = pgdata
-        self.pg = None
+    def __init__(self, pgdata: Path) -> None:
+        self.pgbin: Path = self.find_pgbin()
+        self.pgdata: Path = pgdata
+        self.pg: subprocess.Popen[bytes] | None = None
 
     @staticmethod
-    def find_pgbin(versions=None):
+    def find_pgbin(versions: list[str] | None = None) -> Path:
         pathformats = ["/usr/pgsql-{ver}/bin", "/usr/lib/postgresql/{ver}/bin"]
         for ver in versions or PG_VERSIONS:
             for pathfmt in pathformats:
-                pgbin = pathfmt.format(ver=ver)
-                if os.path.exists(pgbin):
+                pgbin = Path(pathfmt.format(ver=ver))
+                if pgbin.is_dir():
                     return pgbin
-        return "/usr/bin"
+        return Path("/usr/bin")
 
     @property
-    def pgver(self):
-        with open(os.path.join(self.pgdata, "PG_VERSION"), "r") as fp:
-            return fp.read().strip()
+    def pgver(self) -> str:
+        return (self.pgdata / "PG_VERSION").read_text().strip()
 
-    def connection_string(self, user="testuser", dbname="postgres"):
-        return pgutil.create_connection_string(
+    def connection_dict(self, user: str = "testuser", dbname: str = "postgres") -> DsnDict:
+        return cast(
+            DsnDict,
             {
                 "dbname": dbname,
                 "host": self.pgdata,
                 "port": 5432,
                 "user": user,
-            }
+            },
         )
 
-    def createuser(self, user="testuser"):
-        self.run_cmd("createuser", "-h", self.pgdata, "-p", "5432", "-s", user)
+    def createuser(self, user: str = "testuser") -> None:
+        self.run_cmd("createuser", "-h", str(self.pgdata), "-p", "5432", "-s", user)
 
-    def run_cmd(self, cmd, *args):
-        argv = [os.path.join(self.pgbin, cmd)]
-        argv.extend(args)
+    def run_cmd(self, cmd: str, *args: str) -> None:
+        argv = [str(self.pgbin / cmd), *args]
         subprocess.check_call(argv)
 
-    def run_pg(self):
-        self.pg = subprocess.Popen(  # pylint: disable=bad-option-value,consider-using-with
+    def run_pg(self) -> None:
+        self.pg = subprocess.Popen(  # pylint: disable=consider-using-with
             [
-                os.path.join(self.pgbin, "postgres"),
+                str(self.pgbin / "postgres"),
                 "-D",
-                self.pgdata,
+                str(self.pgdata),
                 "-k",
-                self.pgdata,
+                str(self.pgdata),
                 "-p",
                 "5432",
                 "-c",
@@ -91,7 +95,7 @@ class TestPG:
         )
         time.sleep(1.0)  # let pg start
 
-    def kill(self, force=True, immediate=True):
+    def kill(self, force: bool = True, immediate: bool = True) -> None:
         if self.pg is None:
             return
         if force:
@@ -104,27 +108,28 @@ class TestPG:
         while (self.pg.poll() is None) and (time.monotonic() < timeout):
             time.sleep(0.1)
         if not force and self.pg.poll() is None:
-            raise Exception(f"PG pid {self.pg.pid} not dead")
+            raise TimeoutError(f"PG pid {self.pg.pid} not dead")
 
 
-# NOTE: cannot use 'tmpdir' fixture here, it only works in 'function' scope
 @pytest.fixture(scope="session")
-def db():
-    tmpdir_obj = py_path.local(tempfile.mkdtemp(prefix="pglookout_dbtest_"))
-    tmpdir = str(tmpdir_obj)
+def db(tmp_path_factory: pytest.TempPathFactory) -> Generator[TestPG, None, None]:
+    tmpdir = tmp_path_factory.mktemp(basename="pglookout_dbtest_")
     # try to find the binaries for these versions in some path
-    pgdata = os.path.join(tmpdir, "pgdata")
+    pgdata = tmpdir / "pgdata"
     db = TestPG(pgdata)  # pylint: disable=redefined-outer-name
-    db.run_cmd("initdb", "-D", pgdata, "--encoding", "utf-8")
-    # NOTE: point $HOME to tmpdir - $HOME shouldn't affect most tests, but
-    # psql triest to find .pgpass file from there as do our functions that
-    # manipulate pgpass.  By pointing $HOME there we make sure we're not
-    # making persistent changes to the environment.
-    os.environ["HOME"] = tmpdir
+    db.run_cmd("initdb", "-D", str(pgdata), "--encoding", "utf-8")
+
     # allow replication connections
-    with open(os.path.join(pgdata, "pg_hba.conf"), "w") as fp:
-        fp.write("local all all trust\nlocal replication all trust\n")
-    with open(os.path.join(pgdata, "postgresql.conf"), "a") as fp:
+    (pgdata / "pg_hba.conf").write_text(
+        dedent(
+            """\
+        local all all trust
+        local replication all trust
+    """
+        )
+    )
+
+    with (pgdata / "postgresql.conf").open("a") as fp:
         fp.write(
             "max_wal_senders = 2\n"
             "wal_level = logical\n"
@@ -136,14 +141,16 @@ def db():
         )
         if db.pgver < "13":
             fp.write("wal_keep_segments = 100\n")
-    db.run_pg()
-    try:
-        db.createuser()
-        db.createuser("otheruser")
-        yield db
-    finally:
-        db.kill()
+
+    # NOTE: point $HOME to tmpdir - $HOME shouldn't affect most tests, but
+    # psql triest to find .pgpass file from there as do our functions that
+    # manipulate pgpass.  By pointing $HOME there we make sure we're not
+    # making persistent changes to the environment.
+    with patch.dict(os.environ, {"HOME": str(tmpdir)}):
+        db.run_pg()
         try:
-            tmpdir_obj.remove(rec=1)
-        except:  # pylint: disable=bare-except
-            pass
+            db.createuser()
+            db.createuser("otheruser")
+            yield db
+        finally:
+            db.kill()

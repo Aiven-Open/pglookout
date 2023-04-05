@@ -14,5 +14,7 @@ coverage.xml
 rpm/
 dist/
 
+.venv-test/
+
 # Generated targets
 pglookout-rpm-src.tar

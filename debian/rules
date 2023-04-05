@@ -3,4 +3,4 @@
 export PYBUILD_NAME=pglookout
 
 %:
-	dh $@ --with python2 --with systemd --buildsystem=pybuild
+	dh $@ --with python3 --with systemd --buildsystem=pybuild

@@ -8,7 +8,6 @@ Source0:        pglookout-rpm-src.tar
 Obsoletes:      python3-pglookout
 Requires:       python3-packaging, python3-psycopg2, python3-requests, python3-setuptools, systemd-python3, systemd
 BuildRequires:  python3-packaging, python3-psycopg2, python3-requests, python3-setuptools, systemd-python3, systemd
-BuildRequires:  python3-pytest, python3-pylint
 BuildArch:      noarch
 
 %description

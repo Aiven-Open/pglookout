@@ -7,72 +7,96 @@ Copyright (c) 2014 F-Secure
 This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
-from . import logutil, statsd, version
-from .cluster_monitor import ClusterMonitor
-from .common import convert_xlog_location_to_offset, get_iso_timestamp, parse_iso_datetime
-from .pgutil import create_connection_string, get_connection_info, get_connection_info_from_config_line
-from .webserver import WebServer
-from packaging.version import parse
-from psycopg2.extensions import adapt
-from queue import Empty, Queue
-from typing import Optional
+from __future__ import annotations
 
-import argparse
-import copy
-import datetime
+from argparse import ArgumentParser
+from copy import deepcopy
+from datetime import datetime, timedelta
+from logging import _nameToLevel, DEBUG, getLogger, Logger
+from logging.handlers import SysLogHandler
+from packaging.version import parse as parse_version
+from pathlib import Path
+from pglookout.cluster_monitor import ClusterMonitor
+from pglookout.common import convert_xlog_location_to_offset, get_iso_timestamp, parse_iso_datetime
+from pglookout.common_types import MemberState, ObservedState
+from pglookout.config import Config, Statsd
+from pglookout.default import (
+    JSON_STATE_FILE_PATH,
+    MAINTENANCE_MODE_FILE,
+    MAX_FAILOVER_REPLICATION_TIME_LAG,
+    MISSING_MASTER_FROM_CONFIG_TIMEOUT,
+    PG_DATA_DIRECTORY,
+    REPLICATION_CATCHUP_TIMEOUT,
+    WARNING_REPLICATION_TIME_LAG,
+)
+from pglookout.logutil import configure_logging, notify_systemd, set_syslog_handler
+from pglookout.pgutil import (
+    ConnectionParameterKeywords,
+    create_connection_string,
+    get_connection_info,
+    get_connection_info_from_config_line,
+)
+from pglookout.statsd import StatsClient
+from pglookout.version import __version__
+from pglookout.webserver import WebServer
+from psycopg2.extensions import adapt, QuotedString
+from queue import Empty, Queue
+from signal import SIGHUP, SIGINT, signal, SIGTERM
+from socket import gethostname
+from subprocess import CalledProcessError, check_call
+from types import FrameType
+from typing import Any, cast, Final, Optional
+
 import json
-import logging
-import logging.handlers
-import os
-import signal
-import socket
-import subprocess
 import sys
 import time
 
+DEFAULT_LOG_LEVEL: Final[str] = "DEBUG"
+LOG_LEVEL_NAMES_MAPPING: Final[dict[str, int]] = deepcopy(_nameToLevel)
+
 
 class PgLookout:
-    def __init__(self, config_path):
-        self.log = logging.getLogger("pglookout")
+    def __init__(self, config_path: Path | str) -> None:
+        self.log: Logger = getLogger("pglookout")
         # dummy to make sure we never get an AttributeError -> gets overwritten after the first config loading
-        self.stats = statsd.StatsClient(host=None)
-        self.running = True
-        self.replication_lag_over_warning_limit = False
+        self.stats: StatsClient = StatsClient(host=None)
+        self.running: bool = True
+        self.replication_lag_over_warning_limit: bool = False
 
-        self.config_path = config_path
-        self.config = {}
-        self.log_level = "DEBUG"
+        self.config_path: Path = Path(config_path)
+        self.config: Config = {}
+        self.log_level: int = LOG_LEVEL_NAMES_MAPPING[DEFAULT_LOG_LEVEL]
 
-        self.connected_master_nodes = {}
-        self.disconnected_master_nodes = {}
-        self.connected_observer_nodes = {}
-        self.disconnected_observer_nodes = {}
-        self.replication_catchup_timeout = None
-        self.replication_lag_warning_boundary = None
-        self.replication_lag_failover_timeout = None
-        self.missing_master_from_config_timeout = None
-        self.own_db = None
-        self.current_master = None
-        self.failover_command = None
-        self.known_gone_nodes = None
-        self.over_warning_limit_command = None
-        self.never_promote_these_nodes = None
-        self.primary_conninfo_template = None
-        self.cluster_monitor = None
-        self.syslog_handler = None
-        self.cluster_nodes_change_time = time.monotonic()
-        self.cluster_monitor_check_queue = Queue()
-        self.failover_decision_queue = Queue()
-        self.observer_state_newer_than = datetime.datetime.min
-        self._start_time = None
+        self.connected_master_nodes: dict[str, MemberState] = {}
+        self.disconnected_master_nodes: dict[str, MemberState] = {}
+        self.connected_observer_nodes: dict[str, str | None] = {}  # name => ISO fetch time
+        self.disconnected_observer_nodes: dict[str, str | None] = {}  # name => ISO fetch time
+        self.replication_catchup_timeout: float = REPLICATION_CATCHUP_TIMEOUT
+        self.replication_lag_warning_boundary: float = WARNING_REPLICATION_TIME_LAG
+        self.replication_lag_failover_timeout: float = MAX_FAILOVER_REPLICATION_TIME_LAG
+        self.missing_master_from_config_timeout: float = MISSING_MASTER_FROM_CONFIG_TIMEOUT
+        self.own_db: str = ""
+        self.current_master: str | None = None
+        self.failover_command: list[str] = []
+        self.known_gone_nodes: list[str] = []
+        self.over_warning_limit_command: str | None = None
+        self.never_promote_these_nodes: list[str] = []
+        self.primary_conninfo_template: ConnectionParameterKeywords = {}
+        self.cluster_monitor: ClusterMonitor | None = None
+        self.syslog_handler: SysLogHandler | None = None
+        self.cluster_nodes_change_time: float = time.monotonic()
+        self.cluster_monitor_check_queue: Queue[str] = Queue()
+        self.failover_decision_queue: Queue[str] = Queue()
+        self.observer_state_newer_than: datetime = datetime.min
+        self._start_time: float | None = None
         self.load_config()
 
-        signal.signal(signal.SIGHUP, self.load_config)
-        signal.signal(signal.SIGINT, self.quit)
-        signal.signal(signal.SIGTERM, self.quit)
+        signal(SIGHUP, self.load_config_from_signal)
+        signal(SIGINT, self.quit)
+        signal(SIGTERM, self.quit)
 
-        self.cluster_state = {}
-        self.observer_state = {}
+        self.cluster_state: dict[str, MemberState] = {}
+        self.observer_state: dict[str, ObservedState] = {}
 
         self.cluster_monitor = ClusterMonitor(
             config=self.config,
@@ -86,69 +110,123 @@ class PgLookout:
         )
         # cluster_monitor doesn't exist at the time of reading the config initially
         self.cluster_monitor.log.setLevel(self.log_level)
-        self.webserver = WebServer(self.config, self.cluster_state, self.cluster_monitor_check_queue)
+        self.webserver: WebServer = WebServer(self.config, self.cluster_state, self.cluster_monitor_check_queue)
 
-        logutil.notify_systemd("READY=1")
+        if not self._is_initial_state_valid():
+            self.log.error("Initial state is invalid, exiting.")
+            sys.exit(1)
+
+        notify_systemd("READY=1")
         self.log.info(
             "PGLookout initialized, local hostname: %r, own_db: %r, cwd: %r",
-            socket.gethostname(),
+            gethostname(),
             self.own_db,
-            os.getcwd(),
+            Path.cwd(),
         )
 
-    def quit(self, _signal=None, _frame=None):
+    def _is_initial_state_valid(self) -> bool:
+        """Check if the initial state of PgLookout is valid.
+
+        Note:
+            This method is only needed because we had to pick some default values before loading the config.
+            A better approach would be to load the config first, and then initialize PgLookout.
+            For that, :any:`load_config` should be split into two methods: one for loading the config, and one for
+            applying the config when doing hot reloads. The method loading the config should make minimal usage of
+            ``self`` and return a new ``Config`` object. The method applying the config should accept a ``Config``
+            object and apply it to ``self``. Meanwhile, ``__init__`` should use this ``Config`` object to initialize
+            itself, and it could be in different ways than during hot reloads (some internals don't depend on the config).
+
+        Note:
+            To developers: Any attribute that should be mandatory in the config should be checked here.
+        """
+        is_valid = True
+
+        if not self.config or not self.config_path.is_file():
+            self.log.error("Config is empty!")
+            is_valid = False
+
+        if not self.own_db:
+            self.log.error("`own_db` has not been set!")
+            is_valid = False
+
+        return is_valid
+
+    def quit(self, _signal: int | None = None, _frame: FrameType | None = None) -> None:
+        if self.cluster_monitor is None:
+            raise RuntimeError("Cluster monitor is not initialized!")
+
         self.log.warning("Quitting, signal: %r, frame: %r", _signal, _frame)
         self.cluster_monitor.running = False
         self.running = False
         self.webserver.close()
 
-    def load_config(self, _signal=None, _frame=None):
+    def load_config_from_signal(self, _signal: int, _frame: FrameType | None = None) -> None:
         self.log.debug(
             "Loading JSON config from: %r, signal: %r, frame: %r",
             self.config_path,
             _signal,
             _frame,
         )
+        self.load_config()
+
+    @staticmethod
+    def normalize_config(config: dict[str, Any]) -> Config:
+        """Normalize the config to a known format.
+
+        Warning:
+            This method does not give any guarantees about the validity of the config.
+
+        Note:
+            A better approach would be to use a schema to validate the config, or
+            tu use something like ``pydantic`` or ``dataclasses`` to define the config.
+        """
+        if "remote_conns" in config:
+            config["remote_conns"] = {name: get_connection_info(info) for name, info in config["remote_conns"].items()}
+
+        return cast(Config, config)
+
+    def load_config(self) -> None:
+        self.log.debug("Loading JSON config from: %r", self.config_path)
 
         previous_remote_conns = self.config.get("remote_conns")
         try:
-            with open(self.config_path) as fp:
-                self.config = json.load(fp)
+            config = json.loads(self.config_path.read_text(encoding="utf-8"))
+            self.config = self.normalize_config(config)
         except Exception as ex:  # pylint: disable=broad-except
             self.log.exception("Invalid JSON config, exiting")
             self.stats.unexpected_exception(ex, where="load_config")
             sys.exit(1)
 
         # statsd settings may have changed
-        stats = self.config.get("statsd", {})
-        self.stats = statsd.StatsClient(host=stats.get("host"), port=stats.get("port"), tags=stats.get("tags"))
+        stats: Statsd = self.config.get("statsd", {})
+        self.stats = StatsClient(**stats)
 
         if previous_remote_conns != self.config.get("remote_conns"):
             self.cluster_nodes_change_time = time.monotonic()
 
-        if self.config.get("autofollow"):
+        if self.config.get("autofollow", False):
             try:
                 self.primary_conninfo_template = get_connection_info(self.config["primary_conninfo_template"])
             except (KeyError, ValueError):
                 self.log.exception("Invalid or missing primary_conninfo_template; not enabling autofollow")
                 self.config["autofollow"] = False
 
-        if self.cluster_monitor:
-            self.cluster_monitor.config = copy.deepcopy(self.config)
+        if self.cluster_monitor is not None:
+            self.cluster_monitor.config = deepcopy(self.config)
 
-        if self.config.get("syslog") and not self.syslog_handler:
-            self.syslog_handler = logutil.set_syslog_handler(
+        if self.config.get("syslog") and self.syslog_handler is None:
+            self.syslog_handler = set_syslog_handler(
                 address=self.config.get("syslog_address", "/dev/log"),
                 facility=self.config.get("syslog_facility", "local2"),
-                logger=logging.getLogger(),
+                logger=getLogger(),
             )
-        self.own_db = self.config.get("own_db")
+        self.own_db = self.config.get("own_db", "")
 
-        log_level_name = self.config.get("log_level", "DEBUG")
-        self.log_level = getattr(logging, log_level_name)
+        log_level_name = self.config.get("log_level", DEFAULT_LOG_LEVEL)
+        self.log_level = LOG_LEVEL_NAMES_MAPPING[log_level_name]
         try:
             self.log.setLevel(self.log_level)
-            if self.cluster_monitor:
+            if self.cluster_monitor is not None:
                 self.cluster_monitor.log.setLevel(self.log_level)
         except ValueError:
             print(f"Problem setting log level {self.log_level!r}")
@@ -156,12 +234,17 @@ class PgLookout:
         self.known_gone_nodes = self.config.get("known_gone_nodes", [])
         self.never_promote_these_nodes = self.config.get("never_promote_these_nodes", [])
         # we need the failover_command to be converted into subprocess [] format
+        # XXX BF-1971: The next two lines are potentially unsafe. We should use shlex.split instead.
         self.failover_command = self.config.get("failover_command", "").split()
         self.over_warning_limit_command = self.config.get("over_warning_limit_command")
-        self.replication_lag_warning_boundary = self.config.get("warning_replication_time_lag", 30.0)
-        self.replication_lag_failover_timeout = self.config.get("max_failover_replication_time_lag", 120.0)
-        self.replication_catchup_timeout = self.config.get("replication_catchup_timeout", 300.0)
-        self.missing_master_from_config_timeout = self.config.get("missing_master_from_config_timeout", 15.0)
+        self.replication_lag_warning_boundary = self.config.get("warning_replication_time_lag", WARNING_REPLICATION_TIME_LAG)
+        self.replication_lag_failover_timeout = self.config.get(
+            "max_failover_replication_time_lag", MAX_FAILOVER_REPLICATION_TIME_LAG
+        )
+        self.replication_catchup_timeout = self.config.get("replication_catchup_timeout", REPLICATION_CATCHUP_TIMEOUT)
+        self.missing_master_from_config_timeout = self.config.get(
+            "missing_master_from_config_timeout", MISSING_MASTER_FROM_CONFIG_TIMEOUT
+        )
 
         if self.replication_lag_warning_boundary >= self.replication_lag_failover_timeout:
             msg = "Replication lag warning boundary (%s) is not lower than its failover timeout (%s)"
@@ -177,14 +260,14 @@ class PgLookout:
         self.log.debug("Loaded config: %r from: %r", self.config, self.config_path)
         self.cluster_monitor_check_queue.put("new config came, recheck")
 
-    def write_cluster_state_to_json_file(self):
+    def write_cluster_state_to_json_file(self) -> None:
         """Periodically write a JSON state file to disk
 
         Currently only used to share state with the current_master helper command, pglookout itself does
         not rely in this file.
         """
         start_time = time.monotonic()
-        state_file_path = self.config.get("json_state_file_path", "/tmp/pglookout_state.json")
+        state_file_path = Path(self.config.get("json_state_file_path", JSON_STATE_FILE_PATH))
         overall_state = {
             "db_nodes": self.cluster_state,
             "observer_nodes": self.observer_state,
@@ -193,13 +276,15 @@ class PgLookout:
         try:
             json_to_dump = json.dumps(overall_state, indent=4)
             self.log.debug(
-                "Writing JSON state file to: %r, file_size: %r",
+                "Writing JSON state file to: %s, file_size: %r",
                 state_file_path,
                 len(json_to_dump),
             )
-            with open(state_file_path + ".tmp", "w") as fp:
-                fp.write(json_to_dump)
-            os.rename(state_file_path + ".tmp", state_file_path)
+
+            state_file_path_tmp = state_file_path.with_name(f"{state_file_path.name}.tmp")
+            state_file_path_tmp.write_text(json_to_dump, encoding="utf-8")
+            state_file_path_tmp.rename(state_file_path)
+
             self.log.debug(
                 "Wrote JSON state file to disk, took %.4fs",
                 time.monotonic() - start_time,
@@ -212,88 +297,130 @@ class PgLookout:
             )
             self.stats.unexpected_exception(ex, where="write_cluster_state_to_json_file")
 
-    def create_node_map(self, cluster_state, observer_state):
+    def create_node_map(
+        self, cluster_state: dict[str, MemberState], observer_state: dict[str, ObservedState]
+    ) -> tuple[str | None, MemberState | None, dict[str, MemberState]]:
         """Computes roles for each known member of cluster.
 
-        Use the information gathered in the cluster_state and observer_state to figure out the roles of each member."""
-        standby_nodes, master_node, master_instance = {}, None, None
-        connected_master_nodes, disconnected_master_nodes = {}, {}
-        connected_observer_nodes, disconnected_observer_nodes = {}, {}
+        Use the information gathered in the ``cluster_state`` and ``observer_state`` to figure out the roles of each member.
+
+        Returns:
+            A 3-tuple with the following elements:
+            - The name of the master instance
+            - The state of the master instance
+            - A dictionary of the standby instances and their states
+        """
+        master_instance: str | None = None
+        master_node: MemberState | None = None
+        standby_nodes: dict[str, MemberState] = {}
+
+        connected_master_nodes: dict[str, MemberState] = {}
+        disconnected_master_nodes: dict[str, MemberState] = {}
+        connected_observer_nodes: dict[str, str | None] = {}
+        disconnected_observer_nodes: dict[str, str | None] = {}
+
         self.log.debug(
             "Creating node map out of cluster_state: %r and observer_state: %r",
             cluster_state,
             observer_state,
         )
-        for instance, state in cluster_state.items():
-            if "pg_is_in_recovery" in state:
-                if state["pg_is_in_recovery"]:
-                    standby_nodes[instance] = state
-                elif state["connection"]:
-                    connected_master_nodes[instance] = state
-                elif not state["connection"]:
-                    disconnected_master_nodes[instance] = state
+
+        for instance_name, member_state in cluster_state.items():
+            if "pg_is_in_recovery" in member_state:
+                if member_state["pg_is_in_recovery"]:
+                    standby_nodes[instance_name] = member_state
+                elif member_state["connection"]:
+                    connected_master_nodes[instance_name] = member_state
+                else:
+                    disconnected_master_nodes[instance_name] = member_state
             else:
                 self.log.debug(
                     "No knowledge on instance: %r state: %r of whether it's in recovery or not",
-                    instance,
-                    state,
+                    instance_name,
+                    member_state,
                 )
 
-        for observer_name, state in observer_state.items():  # pylint: disable=too-many-nested-blocks
-            connected = state.get("connection", False)
+        for observer_name, observed_state in observer_state.items():  # pylint: disable=too-many-nested-blocks
+            connected = cast(bool, observed_state.get("connection", False))
+            state_fetch_time = cast(Optional[str], observed_state.get("fetch_time"))
             if connected:
-                connected_observer_nodes[observer_name] = state.get("fetch_time")
+                connected_observer_nodes[observer_name] = state_fetch_time
             else:
-                disconnected_observer_nodes[observer_name] = state.get("fetch_time")
-            for instance, db_state in state.items():
-                if instance not in cluster_state:
+                disconnected_observer_nodes[observer_name] = state_fetch_time
+            for ob_state_key, ob_state_value in observed_state.items():
+                if ob_state_key in ["connection", "fetch_time"]:
+                    continue
+
+                observed_member_name = ob_state_key
+                observed_member_state = cast(MemberState, ob_state_value)
+
+                if observed_member_name not in cluster_state:
                     # A single observer can observe multiple different replication clusters.
                     # Ignore data on nodes that don't belong in our own cluster
                     self.log.debug(
                         "Ignoring instance: %r since it does not belong into our own replication cluster",
-                        instance,
+                        observed_member_name,
                     )
                     continue
-                if isinstance(db_state, dict):  # other keys are "connection" and "fetch_time"
-                    own_fetch_time = parse_iso_datetime(cluster_state[instance]["fetch_time"])
-                    observer_fetch_time = parse_iso_datetime(db_state["fetch_time"])
-                    self.log.debug(
-                        "observer_name: %r, instance: %r, state: %r, observer_fetch_time: %r",
+
+                if not isinstance(observed_member_state, dict):  # other keys are "connection" and "fetch_time"
+                    self.log.error(
+                        "Observer %r has invalid state for instance %r: %r",
                         observer_name,
-                        instance,
-                        db_state,
-                        observer_fetch_time,
+                        observed_member_name,
+                        observed_member_state,
                     )
-                    if "pg_is_in_recovery" in db_state:
-                        if db_state["pg_is_in_recovery"]:
-                            # we always trust ourselves the most for localhost, and
-                            # in case we are actually connected to the other node
-                            if observer_fetch_time >= own_fetch_time and instance != self.own_db:
-                                if instance not in standby_nodes or standby_nodes[instance]["connection"] is False:
-                                    standby_nodes[instance] = db_state
-                        else:
-                            master_node = connected_master_nodes.get(instance, {})
-                            connected = master_node.get("connection", False)
-                            self.log.debug(
-                                "Observer: %r sees %r as master, we see: %r, same_master: %r, connection: %r",
-                                observer_name,
-                                instance,
-                                self.current_master,
-                                instance == self.current_master,
-                                db_state.get("connection"),
-                            )
-                            if self.within_dbpoll_time(observer_fetch_time, own_fetch_time) and instance != self.own_db:
-                                if connected or db_state["connection"]:
-                                    connected_master_nodes[instance] = db_state
-                                else:
-                                    disconnected_master_nodes[instance] = db_state
+                    self.log.error(
+                        "Allowed keys are 'connection' (bool) and 'fetch_time' (str)"
+                        " and all observed instance names for the cluster."
+                    )
+                    continue
+
+                own_fetch_time = parse_iso_datetime(cluster_state[observed_member_name]["fetch_time"])
+                observer_fetch_time = parse_iso_datetime(observed_member_state["fetch_time"])
+                self.log.debug(
+                    "observer_name: %r, instance: %r, state: %r, observer_fetch_time: %r",
+                    observer_name,
+                    observed_member_name,
+                    observed_member_state,
+                    observer_fetch_time,
+                )
+                if "pg_is_in_recovery" in observed_member_state:
+                    if observed_member_state["pg_is_in_recovery"]:
+                        # we always trust ourselves the most for localhost, and
+                        # in case we are actually connected to the other node
+                        if observer_fetch_time >= own_fetch_time and observed_member_name != self.own_db:
+                            if (
+                                observed_member_name not in standby_nodes
+                                or standby_nodes[observed_member_name]["connection"] is False
+                            ):
+                                standby_nodes[observed_member_name] = observed_member_state
                     else:
-                        self.log.warning(
-                            "No knowledge on %r %r from observer: %r is in recovery",
-                            instance,
-                            db_state,
+                        master_node = connected_master_nodes.get(observed_member_name, MemberState())
+                        connected = master_node.get("connection", False)
+                        self.log.debug(
+                            "Observer: %r sees %r as master, we see: %r, same_master: %r, connection: %r",
                             observer_name,
+                            observed_member_name,
+                            self.current_master,
+                            observed_member_name == self.current_master,
+                            observed_member_state.get("connection"),
                         )
+                        if (
+                            self.within_dbpoll_time(observer_fetch_time, own_fetch_time)
+                            and observed_member_name != self.own_db
+                        ):
+                            if connected or observed_member_state["connection"]:
+                                connected_master_nodes[observed_member_name] = observed_member_state
+                            else:
+                                disconnected_master_nodes[observed_member_name] = observed_member_state
+                else:
+                    self.log.warning(
+                        "No knowledge on %r %r from observer: %r is in recovery",
+                        observed_member_name,
+                        observed_member_state,
+                        observer_name,
+                    )
 
         self.connected_master_nodes = connected_master_nodes
         self.disconnected_master_nodes = disconnected_master_nodes
@@ -325,19 +452,22 @@ class PgLookout:
 
         return master_instance, master_node, standby_nodes
 
-    def is_restoring_or_catching_up_normally(self, state):
+    def _is_restoring_or_catching_up_normally(self, state: MemberState) -> bool:
         """
         Return True if node is still in the replication catchup phase and
         replication lag alerts/metrics should not yet be generated.
         """
         replication_start_time = state.get("replication_start_time")
         min_lag = state.get("min_replication_time_lag", self.replication_lag_warning_boundary)
+
         if replication_start_time and time.monotonic() - replication_start_time > self.replication_catchup_timeout:
             # we've been replicating for too long and should have caught up with the master already
             return False
+
         if not state.get("pg_last_xlog_receive_location"):
             # node has not received anything from the master yet
             return True
+
         if min_lag >= self.replication_lag_warning_boundary:
             # node is catching up the master and has not gotten close enough yet
             return True
@@ -345,8 +475,8 @@ class PgLookout:
         # node has caught up with the master so we should be in sync
         return False
 
-    def emit_stats(self, state):
-        if self.is_restoring_or_catching_up_normally(state):
+    def emit_stats(self, state: MemberState) -> None:
+        if self._is_restoring_or_catching_up_normally(state):
             # do not emit misleading lag stats during catchup at restore
             return
 
@@ -354,9 +484,10 @@ class PgLookout:
         if replication_time_lag is not None:
             self.stats.gauge("pg.replication_lag", replication_time_lag)
 
-    def is_master_observer_new_enough(self, observer_state):
+    def _is_master_observer_new_enough(self, observer_state: dict[str, ObservedState]) -> bool:
         if not self.replication_lag_over_warning_limit:
             return True
+
         if not self.current_master or self.current_master not in self.config.get("observers", {}):
             self.log.warning(
                 "Replication lag is over warning limit, but"
@@ -364,33 +495,36 @@ class PgLookout:
                 self.current_master,
             )
             return True
-        db_poll_intervals = datetime.timedelta(seconds=5 * self.config.get("db_poll_interval", 5.0))
-        now = datetime.datetime.utcnow()
+
+        db_poll_intervals = timedelta(seconds=5 * self.config.get("db_poll_interval", 5.0))
+        now = datetime.utcnow()
         if (now - self.observer_state_newer_than) < db_poll_intervals:
             self.log.warning(
                 "Replication lag is over warning limit, but"
                 " not waiting for observers to be polled because 5 db_poll_intervals have passed"
             )
             return True
+
         if self.current_master not in observer_state:
             self.log.warning(
                 "Replication lag is over warning limit, but observer for master (%s) has not been polled yet",
                 self.current_master,
             )
             return False
-        fetch_time = parse_iso_datetime(observer_state[self.current_master]["fetch_time"])
+
+        fetch_time = parse_iso_datetime(cast(str, observer_state[self.current_master]["fetch_time"]))
         if fetch_time < self.observer_state_newer_than:
             self.log.warning(
                 "Replication lag is over warning limit, but observer's data for master  is stale, older than %r",
                 self.observer_state_newer_than,
             )
             return False
+
         return True
 
-    def check_cluster_state(self):
-        master_node = None
-        cluster_state = copy.deepcopy(self.cluster_state)
-        observer_state = copy.deepcopy(self.observer_state)
+    def check_cluster_state(self) -> None:
+        cluster_state = deepcopy(self.cluster_state)
+        observer_state = deepcopy(self.observer_state)
         configured_node_count = len(self.config.get("remote_conns", {}))
         if not cluster_state or len(cluster_state) != configured_node_count:
             self.log.warning(
@@ -401,7 +535,7 @@ class PgLookout:
             )
             return
 
-        if self.config.get("poll_observers_on_warning_only") and not self.is_master_observer_new_enough(observer_state):
+        if self.config.get("poll_observers_on_warning_only") and not self._is_master_observer_new_enough(observer_state):
             self.log.warning("observer data is not good enough, skipping check")
             return
 
@@ -416,42 +550,102 @@ class PgLookout:
             )
             self.current_master = master_instance
             if self.own_db and self.own_db != master_instance and self.config.get("autofollow"):
-                self.start_following_new_master(master_instance)
+                self._start_following_new_master(master_instance)
 
+        self._make_failover_decision(observer_state, standby_nodes, master_node)
+
+    def _make_failover_decision(
+        self,
+        observer_state: dict[str, ObservedState],
+        standby_nodes: dict[str, MemberState],
+        master_node: MemberState | None,
+    ) -> None:
+        assert self.own_db is not None
         own_state = self.cluster_state.get(self.own_db)
 
-        observer_info = ",".join(observer_state) or "no"
-        if self.own_db:  # Emit stats if we're a non-observer node
-            self.emit_stats(own_state)
-        else:  # We're an observer ourselves, grab the IP address from HTTP server address
-            observer_info = self.config.get("http_address", observer_info)
+        consider_failover = False
 
-        standby_info = ",".join(standby_nodes) or "no"
-        self.log.debug(
-            "Cluster has %s standbys, %s observers and %s as master, own_db: %r, own_state: %r",
-            standby_info,
-            observer_info,
-            self.current_master,
-            self.own_db,
-            own_state or "observer",
-        )
+        if not self.own_db:
+            self._log_state_when_own_db_is_not_in_cluster(
+                observer_state=observer_state,
+                standby_nodes=standby_nodes,
+            )
+        else:
+            assert own_state is not None
+            consider_failover = self._is_failover_consideration_needed(
+                own_state=own_state,
+                observer_state=observer_state,
+                standby_nodes=standby_nodes,
+                master_node=master_node,
+            )
 
-        if self.own_db:
-            if self.own_db == self.current_master:
-                # We are the master of this cluster, nothing to do
-                self.log.debug(
-                    "We %r: %r are still the master node: %r of this cluster, nothing to do.",
-                    self.own_db,
-                    own_state,
-                    master_node,
-                )
-                return
-            if not standby_nodes:
-                self.log.warning("No standby nodes set, master node: %r", master_node)
-                return
-            self.consider_failover(own_state, master_node, standby_nodes)
+        if consider_failover and own_state:
+            self.consider_failover(
+                own_state=own_state,
+                master_node=master_node,
+                standby_nodes=standby_nodes,
+            )
 
-    def consider_failover(self, own_state, master_node, standby_nodes):
+    def _log_state_when_own_db_is_not_in_cluster(
+        self,
+        observer_state: dict[str, ObservedState],
+        standby_nodes: dict[str, MemberState],
+    ) -> None:
+        if self.log.isEnabledFor(DEBUG):
+            observer_info = self.config.get("http_address", ",".join(observer_state.keys()) or "no")
+            standby_info = ",".join(standby_nodes) or "no"
+            self.log.debug(
+                "Cluster has %s standbys, %s observers and %s as master, own_db: %r, own_state: %r",
+                standby_info,
+                observer_info,
+                self.current_master,
+                self.own_db,
+                "observer",
+            )
+
+    def _is_failover_consideration_needed(
+        self,
+        own_state: MemberState,
+        observer_state: dict[str, ObservedState],
+        standby_nodes: dict[str, MemberState],
+        master_node: MemberState | None,
+    ) -> bool:
+        self.emit_stats(own_state)  # Emit stats if we're a non-observer node
+
+        if self.log.isEnabledFor(DEBUG):
+            observer_info = ",".join(observer_state) or "no"
+            standby_info = ",".join(standby_nodes) or "no"
+            self.log.debug(
+                "Cluster has %s standbys, %s observers and %s as master, own_db: %r, own_state: %r",
+                standby_info,
+                observer_info,
+                self.current_master,
+                self.own_db,
+                own_state,
+            )
+
+        if self.own_db == self.current_master:
+            # We are the master of this cluster, nothing to do
+            self.log.debug(
+                "We %r: %r are still the master node: %r of this cluster, nothing to do.",
+                self.own_db,
+                own_state,
+                master_node,
+            )
+            return False
+
+        if not standby_nodes:
+            self.log.warning("No standby nodes set, master node: %r", master_node)
+            return False
+
+        return True
+
+    def consider_failover(
+        self,
+        own_state: MemberState,
+        master_node: MemberState | None,
+        standby_nodes: dict[str, MemberState],
+    ) -> None:
         if not master_node or not master_node.get("connection"):
             # no master node at all in the cluster?
             self.log.warning(
@@ -489,11 +683,11 @@ class PgLookout:
                 return
         self.check_replication_lag(own_state, standby_nodes)
 
-    def is_replication_lag_over_warning_limit(self):
+    def is_replication_lag_over_warning_limit(self) -> bool:
         return self.replication_lag_over_warning_limit
 
-    def check_replication_lag(self, own_state, standby_nodes):
-        if self.is_restoring_or_catching_up_normally(own_state):
+    def check_replication_lag(self, own_state: MemberState, standby_nodes: dict[str, MemberState]) -> None:
+        if self._is_restoring_or_catching_up_normally(own_state):
             # do not raise alerts during catchup at restore
             return
 
@@ -511,7 +705,7 @@ class PgLookout:
             if not self.replication_lag_over_warning_limit:  # we just went over the boundary
                 self.replication_lag_over_warning_limit = True
                 if self.config.get("poll_observers_on_warning_only"):
-                    self.observer_state_newer_than = datetime.datetime.utcnow()
+                    self.observer_state_newer_than = datetime.utcnow()
                 self.create_alert_file("replication_delay_warning")
                 if self.over_warning_limit_command:
                     self.log.warning(
@@ -531,7 +725,7 @@ class PgLookout:
         elif self.replication_lag_over_warning_limit:
             self.replication_lag_over_warning_limit = False
             self.delete_alert_file("replication_delay_warning")
-            self.observer_state_newer_than = datetime.datetime.min
+            self.observer_state_newer_than = datetime.min
 
         if replication_lag >= self.replication_lag_failover_timeout:
             self.log.warning(
@@ -548,17 +742,16 @@ class PgLookout:
                 standby_nodes,
             )
 
-    def get_replication_positions(self, standby_nodes):
+    def get_replication_positions(self, standby_nodes: dict[str, MemberState]) -> dict[int, set[str]]:
         self.log.debug("Getting replication positions from: %r", standby_nodes)
-        known_replication_positions = {}
+        known_replication_positions: dict[int, set[str]] = {}
         for instance, node_state in standby_nodes.items():
-            now = datetime.datetime.utcnow()
+            now = datetime.utcnow()
             if (
                 node_state["connection"]
-                and now - parse_iso_datetime(node_state["fetch_time"]) < datetime.timedelta(seconds=20)
+                and now - parse_iso_datetime(node_state["fetch_time"]) < timedelta(seconds=20)
                 and instance not in self.never_promote_these_nodes
-            ):  # noqa # pylint: disable=line-too-long
-                # use pg_last_xlog_receive_location if it's available,
+            ):  # use pg_last_xlog_receive_location if it's available,
                 # otherwise fall back to pg_last_xlog_replay_location but
                 # note that both of them can be None.  We prefer
                 # receive_location over replay_location as some nodes may
@@ -572,13 +765,14 @@ class PgLookout:
                 known_replication_positions.setdefault(wal_pos, set()).add(instance)
         return known_replication_positions
 
-    def _been_in_contact_with_master_within_failover_timeout(self):
+    def _been_in_contact_with_master_within_failover_timeout(self) -> bool:
         # no need to do anything here if there are no disconnected masters
         if self.disconnected_master_nodes:
             disconnected_master_node = list(self.disconnected_master_nodes.values())[0]
             db_time = disconnected_master_node.get("db_time", get_iso_timestamp()) or get_iso_timestamp()
-            time_since_last_contact = datetime.datetime.utcnow() - parse_iso_datetime(db_time)
-            if time_since_last_contact < datetime.timedelta(seconds=self.replication_lag_failover_timeout):
+            db_time_as_dt = db_time if isinstance(db_time, datetime) else parse_iso_datetime(db_time)
+            time_since_last_contact = datetime.utcnow() - db_time_as_dt
+            if time_since_last_contact < timedelta(seconds=self.replication_lag_failover_timeout):
                 self.log.debug(
                     "We've had contact with master: %r at: %r within the last %.2fs, not failing over",
                     disconnected_master_node,
@@ -588,7 +782,7 @@ class PgLookout:
                 return True
         return False
 
-    def do_failover_decision(self, own_state, standby_nodes):
+    def do_failover_decision(self, own_state: MemberState, standby_nodes: dict[str, MemberState]) -> None:
         if self.connected_master_nodes:
             self.log.warning(
                 "We still have some connected masters: %r, not failing over",
@@ -640,7 +834,7 @@ class PgLookout:
                 self.log.warning(
                     "Canceling failover even though we were the node the furthest along, since "
                     "this node has an existing maintenance_mode_file: %r",
-                    self.config.get("maintenance_mode_file", "/tmp/pglookout_maintenance_mode_file"),
+                    self.config.get("maintenance_mode_file", MAINTENANCE_MODE_FILE),
                 )
             elif self.own_db in self.never_promote_these_nodes:
                 self.log.warning(
@@ -677,18 +871,18 @@ class PgLookout:
                 furthest_along_instance,
             )
 
-    def modify_recovery_conf_to_point_at_new_master(self, new_master_instance):
-        with open(os.path.join(self.config.get("pg_data_directory"), "PG_VERSION"), "r") as fp:
-            pg_version = fp.read().strip()
+    def _modify_recovery_conf_to_point_at_new_master(self, new_master_instance: str) -> bool:
+        pg_data_directory = Path(self.config.get("pg_data_directory", PG_DATA_DIRECTORY))
+        pg_version = (pg_data_directory / "PG_VERSION").read_text().strip()
 
-        if parse(pg_version) >= parse("12"):
+        if parse_version(pg_version) >= parse_version("12"):
             recovery_conf_filename = "postgresql.auto.conf"
         else:
             recovery_conf_filename = "recovery.conf"
 
-        path_to_recovery_conf = os.path.join(self.config.get("pg_data_directory"), recovery_conf_filename)
-        with open(path_to_recovery_conf, "r") as fp:
-            old_conf = fp.read().splitlines()
+        path_to_recovery_conf = pg_data_directory / recovery_conf_filename
+        old_conf = path_to_recovery_conf.read_text().splitlines()
+
         has_recovery_target_timeline = False
         new_conf = []
         old_conn_info = None
@@ -710,36 +904,46 @@ class PgLookout:
         master_instance_conn_info = get_connection_info(self.config["remote_conns"][new_master_instance])
         assert "host" in master_instance_conn_info
         new_conn_info["host"] = master_instance_conn_info["host"]
+
         if "port" in master_instance_conn_info:
             new_conn_info["port"] = master_instance_conn_info["port"]
+
         if new_conn_info == old_conn_info:
             self.log.debug(
                 "recovery.conf already contains conninfo matching %r, not updating",
                 new_master_instance,
             )
             return False
+
         # Otherwise we append the new primary_conninfo
-        quoted_connection_string = adapt(create_connection_string(new_conn_info))
+        # Mypy: ignore the typing of `adapt`, as we cannot override it ourselves. The provided stubs are incomplete.
+        # Writing our own stubs would discard all the other type information from `psycopg2.extensions`.
+        quoted_connection_string: QuotedString = adapt(
+            create_connection_string(new_conn_info)
+        )  # type: ignore[no-untyped-call]
         new_conf.append(f"primary_conninfo = {quoted_connection_string}")
+
         # The timeline of the recovery.conf will require a higher timeline target
         if not has_recovery_target_timeline:
             new_conf.append("recovery_target_timeline = 'latest'")
+
         # prepend our tag
         iso_timestamp = get_iso_timestamp()
         new_conf.insert(
             0,
             f"# pglookout updated primary_conninfo for instance {new_master_instance} at {iso_timestamp}",
         )
-        # Replace old recovery.conf with a fresh copy
-        with open(path_to_recovery_conf + "_temp", "w") as fp:
-            fp.write("\n".join(new_conf) + "\n")
 
-        os.rename(path_to_recovery_conf + "_temp", path_to_recovery_conf)
+        # Replace old recovery.conf with a fresh copy
+        path_to_recovery_conf_new = path_to_recovery_conf.with_name(f"{path_to_recovery_conf.name}._temp")
+        path_to_recovery_conf_new.write_text("\n".join(new_conf) + "\n")
+        path_to_recovery_conf_new.rename(path_to_recovery_conf)
+
         return True
 
-    def start_following_new_master(self, new_master_instance):
+    def _start_following_new_master(self, new_master_instance: str) -> None:
         start_time = time.monotonic()
-        updated_config = self.modify_recovery_conf_to_point_at_new_master(new_master_instance)
+        updated_config = self._modify_recovery_conf_to_point_at_new_master(new_master_instance)
         if not updated_config:
             self.log.info(
                 "Already following master %r, no need to start following it again",
@@ -763,12 +967,12 @@ class PgLookout:
             time.monotonic() - start_time,
         )
 
-    def execute_external_command(self, command):
+    def execute_external_command(self, command: list[str] | str) -> int:
         self.log.warning("Executing external command: %r", command)
         return_code, output = 0, ""
         try:
-            output = subprocess.check_call(command)
-        except subprocess.CalledProcessError as err:
+            check_call(command)
+        except CalledProcessError as err:
             self.log.exception(
                 "Problem with executing: %r, return_code: %r, output: %r",
                 command,
@@ -776,37 +980,41 @@ class PgLookout:
                 err.output,
             )
             self.stats.unexpected_exception(err, where="execute_external_command")
-            return_code = err.returncode  # pylint: disable=no-member
+            return_code = err.returncode
         self.log.warning("Executed external command: %r, output: %r", return_code, output)
         return return_code
 
-    def check_for_maintenance_mode_file(self):
-        return os.path.exists(self.config.get("maintenance_mode_file", "/tmp/pglookout_maintenance_mode_file"))
+    def check_for_maintenance_mode_file(self) -> bool:
+        return Path(self.config.get("maintenance_mode_file", MAINTENANCE_MODE_FILE)).is_file()
 
-    def create_alert_file(self, filename):
+    def create_alert_file(self, filename: str) -> None:
+        alert_file_dir = Path(self.config.get("alert_file_dir", Path.cwd()))
+        filepath = alert_file_dir / filename
+        self.log.debug("Creating alert file: %r", str(filepath))
         try:
-            filepath = os.path.join(self.config.get("alert_file_dir", os.getcwd()), filename)
-            self.log.debug("Creating alert file: %r", filepath)
-            with open(filepath, "w") as fp:
-                fp.write("alert")
+            filepath.write_text("alert")
         except Exception as ex:  # pylint: disable=broad-except
             self.log.exception("Problem writing alert file: %r", filename)
             self.stats.unexpected_exception(ex, where="create_alert_file")
 
-    def delete_alert_file(self, filename):
-        filepath = os.path.join(self.config.get("alert_file_dir", os.getcwd()), filename)
+    def delete_alert_file(self, filename: str) -> None:
+        alert_file_dir = Path(self.config.get("alert_file_dir", Path.cwd()))
+        filepath = alert_file_dir / filename
         try:
-            if os.path.exists(filepath):
+            if filepath.is_file():
                 self.log.debug("Deleting alert file: %r", filepath)
-                os.unlink(filepath)
+                filepath.unlink(missing_ok=True)
         except Exception as ex:  # pylint: disable=broad-except
             self.log.exception("Problem unlinking: %r", filepath)
             self.stats.unexpected_exception(ex, where="delete_alert_file")
 
-    def within_dbpoll_time(self, time1, time2):
+    def within_dbpoll_time(self, time1: datetime, time2: datetime) -> bool:
         return abs((time1 - time2).total_seconds()) < self.config.get("db_poll_interval", 5.0)
 
     def _check_cluster_monitor_thread_health(self, now: float) -> None:
+        if self.cluster_monitor is None:
+            raise RuntimeError("Cluster Monitor is not initialized!")
+
         health_timeout_seconds = self._get_health_timeout_seconds()
         if health_timeout_seconds:
             last_successful_run = self.cluster_monitor.last_monitoring_success_time or self._start_time
@@ -817,17 +1025,16 @@ class PgLookout:
                     self.stats.increase("cluster_monitor_health_timeout")
                     self.log.warning("cluster_monitor has not been running for %.1f seconds", seconds_since_last_run)
 
-    def _get_health_timeout_seconds(self) -> Optional[float]:
+    def _get_health_timeout_seconds(self) -> float | None:
         if "cluster_monitor_health_timeout_seconds" in self.config:
             config_value = self.config.get("cluster_monitor_health_timeout_seconds")
             return config_value if config_value is None else float(config_value)
-        else:
-            return self._get_check_interval() * 2
+        return self._get_check_interval() * 2
 
     def _get_check_interval(self) -> float:
         return float(self.config.get("replication_state_check_interval", 5.0))
 
-    def main_loop(self):
+    def main_loop(self) -> None:
         while self.running:
             try:
                 self.check_cluster_state()
@@ -835,11 +1042,13 @@ class PgLookout:
             except Exception as ex:  # pylint: disable=broad-except
                 self.log.exception("Failed to check cluster state")
                 self.stats.unexpected_exception(ex, where="main_loop_check_cluster_state")
+
             try:
                 self.write_cluster_state_to_json_file()
             except Exception as ex:  # pylint: disable=broad-except
                 self.log.exception("Failed to write cluster state")
                 self.stats.unexpected_exception(ex, where="main_loop_writer_cluster_state")
+
             try:
                 self.failover_decision_queue.get(timeout=self._get_check_interval())
                 q = self.failover_decision_queue
@@ -852,18 +1061,18 @@ class PgLookout:
             except Empty:
                 pass
 
-    def run(self):
+    def run(self) -> None:
+        if self.cluster_monitor is None:
+            raise RuntimeError("Cluster Monitor is not initialized!")
+
         self._start_time = time.monotonic()
         self.cluster_monitor.start()
         self.webserver.start()
         self.main_loop()
 
 
-def main(args=None):
-    if args is None:
-        args = sys.argv[1:]
-
-    parser = argparse.ArgumentParser(
+def get_argument_parser() -> ArgumentParser:
+    parser = ArgumentParser(
         prog="pglookout",
         description="postgresql replication monitoring and failover daemon",
     )
@@ -871,19 +1080,31 @@ def main(args=None):
         "--version",
         action="version",
         help="show program version",
-        version=version.__version__,
+        version=__version__,
     )
-    parser.add_argument("config", help="configuration file")
+    # it's a type of filepath
+    parser.add_argument("config", type=Path, help="configuration file")
+
+    return parser
+
+
+def main(args: list[str] | None = None) -> int:
+    if args is None:
+        args = sys.argv[1:]
+
+    parser = get_argument_parser()
     arg = parser.parse_args(args)
 
-    if not os.path.exists(arg.config):
+    if not arg.config.is_file():
         print(f"pglookout: {arg.config!r} doesn't exist")
         return 1
 
-    logutil.configure_logging()
+    configure_logging()
 
     pglookout = PgLookout(arg.config)
-    return pglookout.run()
+    pglookout.run()
+
+    return 0
 
 
 if __name__ == "__main__":
