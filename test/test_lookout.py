@@ -709,6 +709,49 @@ def test_failover_master_one_standby_one_observer_no_connections(pgl):
     assert pgl.execute_external_command.call_count == 1
 
 
+def test_failover_master_one_standby_no_observer_no_connections(pgl):
+    pgl.own_db = "this_host"
+    pgl.current_master = "primary"
+
+    # add db state
+    _add_db_to_cluster_state(pgl, "primary", pg_is_in_recovery=False, connection=False)
+    _add_db_to_cluster_state(
+        pgl,
+        "this_host",
+        pg_last_xlog_receive_location="2/aaaaaaaa",
+        pg_is_in_recovery=True,
+        connection=True,
+        replication_time_lag=1.0,
+    )
+
+    # primary is still considered to be part of the cluster even if we're disconnected
+    pgl.check_cluster_state()
+    assert pgl.execute_external_command.call_count == 0
+
+    # age the configuration, we should still be fine as we've seen the primary at `utcnow`
+    pgl.cluster_nodes_change_time = time.monotonic() - pgl.missing_master_from_config_timeout - 1
+    _add_db_to_cluster_state(
+        pgl,
+        "primary",
+        pg_is_in_recovery=False,
+        connection=False,
+        db_time=datetime.datetime.utcnow(),
+    )
+    pgl.check_cluster_state()
+    assert pgl.execute_external_command.call_count == 0
+
+    # now set the db_time to be bigger than the failover-timeout
+    _add_db_to_cluster_state(
+        pgl,
+        "primary",
+        pg_is_in_recovery=False,
+        connection=False,
+        db_time=datetime.datetime.utcnow() - datetime.timedelta(seconds=pgl.replication_lag_failover_timeout + 1),
+    )
+    pgl.check_cluster_state()
+    assert pgl.execute_external_command.call_count == 1
+
+
 def test_find_current_master(pgl):
     _add_db_to_cluster_state(pgl, "master", pg_is_in_recovery=False, connection=True)
     # We will make our own node to be the furthest along so we get considered for promotion
