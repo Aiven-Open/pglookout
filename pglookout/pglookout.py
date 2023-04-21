@@ -65,6 +65,8 @@ class PgLookout:
         self.failover_decision_queue = Queue()
         self.observer_state_newer_than = datetime.datetime.min
         self._start_time = None
+        self._config_version = 0
+        self._config_version_applied = 0
         self.load_config()
 
         signal.signal(signal.SIGHUP, self.load_config)
@@ -174,8 +176,25 @@ class PgLookout:
                 self.replication_lag_warning_boundary = self.replication_lag_failover_timeout
                 msg = "Replication lag warning boundary set to %s"
                 self.log.warning(msg, self.replication_lag_warning_boundary)
+
         self.log.debug("Loaded config: %r from: %r", self.config, self.config_path)
+        self._config_version += 1
         self.cluster_monitor_check_queue.put("new config came, recheck")
+
+    def _apply_latest_config_version(self):
+        """Applies potentially un-applied configuration"""
+        # copy the version and other decision variables to a local variables so we're not missing any updates if the config
+        # gets reloaded twice
+        current_version, own_db, current_master = self._config_version, self.own_db, self.current_master
+        if current_version > self._config_version_applied:
+            self.log.debug("Applying configuration version %r", current_version)
+
+            # regenerate recovery-config if we're following somebody else, as the connection info could have changed
+            if current_master and own_db and own_db != current_master:
+                # this is actually a no-op if the config-file doesn't change, if it changes we're reloading pg
+                self.start_following_new_master(current_master)
+
+            self._config_version_applied = current_version
 
     def write_cluster_state_to_json_file(self):
         """Periodically write a JSON state file to disk
@@ -829,6 +848,11 @@ class PgLookout:
 
     def main_loop(self):
         while self.running:
+            try:
+                self._apply_latest_config_version()
+            except Exception as ex:  # pylint: disable=broad-except
+                self.log.exception("Failed to update configuration")
+                self.stats.unexpected_exception(ex, where="main_loop_writer_cluster_state")
             try:
                 self.check_cluster_state()
                 self._check_cluster_monitor_thread_health(now=time.monotonic())
