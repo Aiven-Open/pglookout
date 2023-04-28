@@ -376,6 +376,11 @@ If set, it will increase the statsd counter `cluster_monitor_health_timeout` if 
 `cluster_monitor` thread has not successfully completed a check since
 `cluster_monitor_health_timeout_seconds`.
 
+``failover_on_disconnect`` (default ``true``)
+
+Determines if we take a fail-over decision if we're not connected to the primary anymore.
+
+
 License
 =======
 

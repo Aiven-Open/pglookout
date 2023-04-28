@@ -711,9 +711,11 @@ def test_failover_master_one_standby_one_observer_no_connections(pgl):
     assert pgl.execute_external_command.call_count == 1
 
 
-def test_failover_master_one_standby_no_observer_no_connections(pgl):
+@pytest.mark.parametrize("failover_on_disconnect", (True, False))
+def test_failover_master_one_standby_no_observer_no_connections(pgl, failover_on_disconnect):
     pgl.own_db = "this_host"
     pgl.current_master = "primary"
+    pgl._failover_on_disconnect = failover_on_disconnect  # pylint: disable=protected-access
 
     # add db state
     _add_db_to_cluster_state(pgl, "primary", pg_is_in_recovery=False, connection=False)
@@ -751,7 +753,10 @@ def test_failover_master_one_standby_no_observer_no_connections(pgl):
         db_time=datetime.datetime.utcnow() - datetime.timedelta(seconds=pgl.replication_lag_failover_timeout + 1),
     )
     pgl.check_cluster_state()
-    assert pgl.execute_external_command.call_count == 1
+    if failover_on_disconnect:
+        assert pgl.execute_external_command.call_count == 1
+    else:
+        assert pgl.execute_external_command.call_count == 0
 
 
 def test_find_current_master(pgl):
