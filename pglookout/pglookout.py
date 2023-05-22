@@ -67,6 +67,7 @@ class PgLookout:
         self._start_time = None
         self._config_version = 0
         self._config_version_applied = 0
+        self._failover_on_disconnect = True
         self.load_config()
 
         signal.signal(signal.SIGHUP, self.load_config)
@@ -164,6 +165,7 @@ class PgLookout:
         self.replication_lag_failover_timeout = self.config.get("max_failover_replication_time_lag", 120.0)
         self.replication_catchup_timeout = self.config.get("replication_catchup_timeout", 300.0)
         self.missing_master_from_config_timeout = self.config.get("missing_master_from_config_timeout", 15.0)
+        self._failover_on_disconnect = self.config.get("failover_on_disconnect", True)
 
         if self.replication_lag_warning_boundary >= self.replication_lag_failover_timeout:
             msg = "Replication lag warning boundary (%s) is not lower than its failover timeout (%s)"
@@ -483,7 +485,10 @@ class PgLookout:
                 self.current_master,
                 master_node,
             )
-            if self.current_master:
+            if not self._failover_on_disconnect and master_node:
+                self.stats.increase("failover_decision_on_disconnect_not_taken")
+                self.log.warning("Not considering failover, because it's not enabled by configuration")
+            elif self.current_master:
                 self.cluster_monitor_check_queue.put("Master is missing, ask for immediate state check")
                 master_known_to_be_gone = self.current_master in self.known_gone_nodes
                 now = time.monotonic()
@@ -506,6 +511,7 @@ class PgLookout:
                 self.log.warning("Performing failover decision because no master node was seen in cluster before timeout")
                 self.do_failover_decision(own_state, standby_nodes)
                 return
+
         self.check_replication_lag(own_state, standby_nodes)
 
     def is_replication_lag_over_warning_limit(self):
