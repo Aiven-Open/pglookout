@@ -871,6 +871,7 @@ class PgLookout:
                 self.log.exception("Failed to write cluster state")
                 self.stats.unexpected_exception(ex, where="main_loop_writer_cluster_state")
             try:
+                time.sleep(1.0)
                 self.failover_decision_queue.get(timeout=self._get_check_interval())
                 q = self.failover_decision_queue
                 while not q.empty():

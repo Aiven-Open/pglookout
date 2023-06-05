@@ -372,6 +372,7 @@ class ClusterMonitor(Thread):
         while self.running:
             requested_check = False
             try:
+                time.sleep(1.0)
                 requested_check = self.cluster_monitor_check_queue.get(timeout=self.config.get("db_poll_interval", 5.0))
             except Empty:
                 pass
