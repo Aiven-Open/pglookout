@@ -6,7 +6,7 @@ Copyright (c) 2015 Ohmu Ltd
 See LICENSE for details
 """
 
-import imp
+import importlib.util
 import os
 import subprocess
 
@@ -24,7 +24,15 @@ def save_version(new_ver, old_ver, version_file):
 def get_project_version(version_file):
     version_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), version_file)
     try:
-        module = imp.load_source("verfile", version_file)
+        # Load the source file using SourceFileLoader
+        loader = importlib.machinery.SourceFileLoader("verfile", version_file)
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        module = importlib.util.module_from_spec(spec)
+
+        # Execute the module code
+        loader.exec_module(module)
+
+        # Access the version attribute from the module
         file_ver = module.__version__
     except IOError:
         file_ver = None
