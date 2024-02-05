@@ -118,6 +118,10 @@ class ClusterMonitor(Thread):
             conn = psycopg2.connect(dsn=dsn, async_=True)
             wait_select(conn)
             self.log.debug("Connected to %s", inst_info_str)
+            cursor = conn.cursor()
+            cursor.execute("SET synchronous_commit = off")
+            wait_select(conn)
+            self.log.debug("synchronous_commit set to off in the session")
         except (PglookoutTimeout, psycopg2.OperationalError) as ex:
             self.log.warning(
                 "%s (%s) connecting to %s (%s)",
