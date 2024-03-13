@@ -69,8 +69,9 @@ class PgLookout:
         self._config_version_applied = 0
         self._failover_on_disconnect = True
         self.load_config()
+        self.config_reload_pending = False
 
-        signal.signal(signal.SIGHUP, self.load_config)
+        signal.signal(signal.SIGHUP, self.sighup)
         signal.signal(signal.SIGINT, self.quit)
         signal.signal(signal.SIGTERM, self.quit)
 
@@ -101,18 +102,21 @@ class PgLookout:
 
     def quit(self, _signal=None, _frame=None):
         self.log.warning("Quitting, signal: %r, frame: %r", _signal, _frame)
-        self.cluster_monitor.running = False
+        if self.cluster_monitor:
+            self.cluster_monitor.running = False
         self.running = False
         self.webserver.close()
 
-    def load_config(self, _signal=None, _frame=None):
+    def sighup(self, _signal=None, _frame=None):
         self.log.debug(
-            "Loading JSON config from: %r, signal: %r, frame: %r",
-            self.config_path,
+            "Requesting config re-load (signal: %r, frame: %r)",
             _signal,
             _frame,
         )
+        self.config_reload_pending = True
 
+    def load_config(self):
+        self.log.debug("Loading JSON config from: %r", self.config_path)
         previous_remote_conns = self.config.get("remote_conns")
         try:
             with open(self.config_path) as fp:
@@ -854,6 +858,9 @@ class PgLookout:
 
     def main_loop(self):
         while self.running:
+            if self.config_reload_pending:
+                self.load_config()
+                self.config_reload_pending = False
             try:
                 self._apply_latest_config_version()
             except Exception as ex:  # pylint: disable=broad-except
