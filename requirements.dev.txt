@@ -1,4 +1,4 @@
-black==22.10.0
+black==24.3.0
 flake8
 flake8-pyproject==1.2.2
 isort==5.10.1
