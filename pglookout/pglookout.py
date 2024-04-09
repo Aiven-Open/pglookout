@@ -494,9 +494,11 @@ class PgLookout:
                 self.log.warning("Not considering failover, because it's not enabled by configuration")
             elif self.current_master:
                 self.cluster_monitor_check_queue.put("Master is missing, ask for immediate state check")
+                self.failover_decision_queue.get(timeout=self.missing_master_from_config_timeout)
                 master_known_to_be_gone = self.current_master in self.known_gone_nodes
                 now = time.monotonic()
                 config_timeout_exceeded = (now - self.cluster_nodes_change_time) >= self.missing_master_from_config_timeout
+
                 if master_known_to_be_gone or config_timeout_exceeded:
                     # we've seen a master at some point in time, but now it's
                     # not reachable or removed from configuration, perform an
@@ -506,14 +508,14 @@ class PgLookout:
                     else:
                         reason = "master node is not reachable"
                     self.log.warning("Performing failover decision because %s", reason)
-                    self.do_failover_decision(own_state, standby_nodes)
+                    self.do_failover_decision(standby_nodes)
                     return
             else:
                 # we've never seen a master and more than failover_timeout
                 # seconds have passed since last config load (and start of
                 # connection attempts to other nodes); perform failover
                 self.log.warning("Performing failover decision because no master node was seen in cluster before timeout")
-                self.do_failover_decision(own_state, standby_nodes)
+                self.do_failover_decision(standby_nodes)
                 return
 
         self.check_replication_lag(own_state, standby_nodes)
@@ -569,7 +571,7 @@ class PgLookout:
                 replication_lag,
                 self.replication_lag_failover_timeout,
             )
-            self.do_failover_decision(own_state, standby_nodes)
+            self.do_failover_decision(standby_nodes)
         else:
             self.log.debug(
                 "Replication lag was: %r, other nodes status was: %r",
@@ -617,7 +619,7 @@ class PgLookout:
                 return True
         return False
 
-    def do_failover_decision(self, own_state, standby_nodes):
+    def do_failover_decision(self, standby_nodes):
         if self.connected_master_nodes:
             self.log.warning(
                 "We still have some connected masters: %r, not failing over",
@@ -664,7 +666,7 @@ class PgLookout:
             int(total_amount_of_nodes),
         )
 
-        if standby_nodes[furthest_along_instance] == own_state:
+        if furthest_along_instance == self.own_db:
             if self.check_for_maintenance_mode_file():
                 self.log.warning(
                     "Canceling failover even though we were the node the furthest along, since "
