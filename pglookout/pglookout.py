@@ -494,11 +494,17 @@ class PgLookout:
                 self.log.warning("Not considering failover, because it's not enabled by configuration")
             elif self.current_master:
                 self.cluster_monitor_check_queue.put("Master is missing, ask for immediate state check")
+                # Refresh the standby nodes list, and check that we still don't have a master node
                 self.failover_decision_queue.get(timeout=self.missing_master_from_config_timeout)
+                cluster_state = copy.deepcopy(self.cluster_state)
+                observer_state = copy.deepcopy(self.observer_state)
+                _, master_node, standby_nodes = self.create_node_map(cluster_state, observer_state)
+                # We seem to have a master node after all
+                if master_node and master_node.get("connection"):
+                    return
                 master_known_to_be_gone = self.current_master in self.known_gone_nodes
                 now = time.monotonic()
                 config_timeout_exceeded = (now - self.cluster_nodes_change_time) >= self.missing_master_from_config_timeout
-
                 if master_known_to_be_gone or config_timeout_exceeded:
                     # we've seen a master at some point in time, but now it's
                     # not reachable or removed from configuration, perform an
