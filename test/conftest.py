@@ -30,6 +30,7 @@ def pgl():
     pgl_.cluster_monitor._connect_to_db = Mock()  # pylint: disable=protected-access
     pgl_.create_alert_file = Mock()
     pgl_.execute_external_command = Mock()
+    pgl_.failover_decision_queue = Mock()
     try:
         yield pgl_
     finally:
