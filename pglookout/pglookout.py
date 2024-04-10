@@ -859,8 +859,12 @@ class PgLookout:
     def main_loop(self):
         while self.running:
             if self.config_reload_pending:
-                self.load_config()
                 self.config_reload_pending = False
+                try:
+                    self.load_config()
+                except:
+                    self.config_reload_pending = True
+                    raise
             try:
                 self._apply_latest_config_version()
             except Exception as ex:  # pylint: disable=broad-except
