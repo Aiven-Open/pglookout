@@ -860,29 +860,33 @@ class PgLookout:
 
     def main_loop(self):
         while self.running:
+            new_config = False
             if self.config_reload_pending:
                 self.config_reload_pending = False
                 try:
                     self.load_config()
+                    new_config = True
                 except:
                     self.config_reload_pending = True
                     raise
-            try:
-                self._apply_latest_config_version()
-            except Exception as ex:  # pylint: disable=broad-except
-                self.log.exception("Failed to update configuration")
-                self.stats.unexpected_exception(ex, where="main_loop_writer_cluster_state")
-            try:
-                self.check_cluster_state()
-                self._check_cluster_monitor_thread_health(now=time.monotonic())
-            except Exception as ex:  # pylint: disable=broad-except
-                self.log.exception("Failed to check cluster state")
-                self.stats.unexpected_exception(ex, where="main_loop_check_cluster_state")
-            try:
-                self.write_cluster_state_to_json_file()
-            except Exception as ex:  # pylint: disable=broad-except
-                self.log.exception("Failed to write cluster state")
-                self.stats.unexpected_exception(ex, where="main_loop_writer_cluster_state")
+            # If we have a new config, wait for the requested check to be completed before we try anything else.
+            if not new_config:
+                try:
+                    self._apply_latest_config_version()
+                except Exception as ex:  # pylint: disable=broad-except
+                    self.log.exception("Failed to update configuration")
+                    self.stats.unexpected_exception(ex, where="main_loop_writer_cluster_state")
+                try:
+                    self.check_cluster_state()
+                    self._check_cluster_monitor_thread_health(now=time.monotonic())
+                except Exception as ex:  # pylint: disable=broad-except
+                    self.log.exception("Failed to check cluster state")
+                    self.stats.unexpected_exception(ex, where="main_loop_check_cluster_state")
+                try:
+                    self.write_cluster_state_to_json_file()
+                except Exception as ex:  # pylint: disable=broad-except
+                    self.log.exception("Failed to write cluster state")
+                    self.stats.unexpected_exception(ex, where="main_loop_writer_cluster_state")
             try:
                 self.failover_decision_queue.get(timeout=self._get_check_interval())
                 q = self.failover_decision_queue
