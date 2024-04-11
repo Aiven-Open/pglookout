@@ -494,11 +494,17 @@ class PgLookout:
                 self.log.warning("Not considering failover, because it's not enabled by configuration")
             elif self.current_master:
                 self.cluster_monitor_check_queue.put("Master is missing, ask for immediate state check")
+                # Refresh the standby nodes list, and check that we still don't have a master node
                 self.failover_decision_queue.get(timeout=self.missing_master_from_config_timeout)
+                cluster_state = copy.deepcopy(self.cluster_state)
+                observer_state = copy.deepcopy(self.observer_state)
+                _, master_node, standby_nodes = self.create_node_map(cluster_state, observer_state)
+                # We seem to have a master node after all
+                if master_node and master_node.get("connection"):
+                    return
                 master_known_to_be_gone = self.current_master in self.known_gone_nodes
                 now = time.monotonic()
                 config_timeout_exceeded = (now - self.cluster_nodes_change_time) >= self.missing_master_from_config_timeout
-
                 if master_known_to_be_gone or config_timeout_exceeded:
                     # we've seen a master at some point in time, but now it's
                     # not reachable or removed from configuration, perform an
@@ -860,29 +866,33 @@ class PgLookout:
 
     def main_loop(self):
         while self.running:
+            new_config = False
             if self.config_reload_pending:
                 self.config_reload_pending = False
                 try:
                     self.load_config()
+                    new_config = True
                 except:
                     self.config_reload_pending = True
                     raise
-            try:
-                self._apply_latest_config_version()
-            except Exception as ex:  # pylint: disable=broad-except
-                self.log.exception("Failed to update configuration")
-                self.stats.unexpected_exception(ex, where="main_loop_writer_cluster_state")
-            try:
-                self.check_cluster_state()
-                self._check_cluster_monitor_thread_health(now=time.monotonic())
-            except Exception as ex:  # pylint: disable=broad-except
-                self.log.exception("Failed to check cluster state")
-                self.stats.unexpected_exception(ex, where="main_loop_check_cluster_state")
-            try:
-                self.write_cluster_state_to_json_file()
-            except Exception as ex:  # pylint: disable=broad-except
-                self.log.exception("Failed to write cluster state")
-                self.stats.unexpected_exception(ex, where="main_loop_writer_cluster_state")
+            # If we have a new config, wait for the requested check to be completed before we try anything else.
+            if not new_config:
+                try:
+                    self._apply_latest_config_version()
+                except Exception as ex:  # pylint: disable=broad-except
+                    self.log.exception("Failed to update configuration")
+                    self.stats.unexpected_exception(ex, where="main_loop_writer_cluster_state")
+                try:
+                    self.check_cluster_state()
+                    self._check_cluster_monitor_thread_health(now=time.monotonic())
+                except Exception as ex:  # pylint: disable=broad-except
+                    self.log.exception("Failed to check cluster state")
+                    self.stats.unexpected_exception(ex, where="main_loop_check_cluster_state")
+                try:
+                    self.write_cluster_state_to_json_file()
+                except Exception as ex:  # pylint: disable=broad-except
+                    self.log.exception("Failed to write cluster state")
+                    self.stats.unexpected_exception(ex, where="main_loop_writer_cluster_state")
             try:
                 self.failover_decision_queue.get(timeout=self._get_check_interval())
                 q = self.failover_decision_queue
