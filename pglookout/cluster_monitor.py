@@ -297,6 +297,8 @@ class ClusterMonitor(Thread):
 
         if f_result:
             result.update(self._parse_status_query_result(f_result))
+            if instance == self.config.get("cascading_replication_primary") and "pg_is_in_recovery" in result:
+                result["pg_is_in_recovery"] = False
         return result
 
     @staticmethod
