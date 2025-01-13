@@ -7,6 +7,8 @@ Copyright (c) 2014 F-Secure
 This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
+
+from .utils import add_to_observer_state, set_instance_cluster_state
 from pathlib import Path
 from pglookout.common import get_iso_timestamp
 from pglookout.pglookout import PgLookout
@@ -48,83 +50,8 @@ def test_load_config(pgl):
     assert pgl.own_db == "1.2.3.4"
 
 
-def _create_db_node_state(
-    pg_last_xlog_receive_location=None,
-    pg_is_in_recovery=True,
-    connection=True,
-    replication_time_lag=None,
-    fetch_time=None,
-    db_time=None,
-):
-    return {
-        "connection": connection,
-        "db_time": get_iso_timestamp(db_time),
-        "fetch_time": get_iso_timestamp(fetch_time),
-        "pg_is_in_recovery": pg_is_in_recovery,
-        "pg_last_xact_replay_timestamp": None,
-        "pg_last_xlog_receive_location": pg_last_xlog_receive_location,
-        "pg_last_xlog_replay_location": None,
-        "replication_time_lag": replication_time_lag,
-        "min_replication_time_lag": 0,  # simulate that we've been in sync once
-    }
-
-
-def _add_to_observer_state(
-    pgl,
-    observer_name,
-    db_name,
-    pg_last_xlog_receive_location=None,
-    pg_is_in_recovery=True,
-    connection=True,
-    replication_time_lag=None,
-    fetch_time=None,
-    db_time=None,
-):
-    db_node_state = _create_db_node_state(
-        pg_last_xlog_receive_location,
-        pg_is_in_recovery,
-        connection,
-        replication_time_lag,
-        fetch_time=fetch_time,
-        db_time=db_time,
-    )
-    update_dict = {
-        "fetch_time": get_iso_timestamp(),
-        "connection": True,
-        db_name: db_node_state,
-    }
-    if observer_name in pgl.observer_state:
-        pgl.observer_state[observer_name].update(update_dict)
-    else:
-        pgl.observer_state[observer_name] = update_dict
-
-
-def _set_instance_cluster_state(
-    pgl,
-    *,
-    instance,
-    pg_last_xlog_receive_location=None,
-    pg_is_in_recovery=True,
-    connection=True,
-    replication_time_lag=None,
-    fetch_time=None,
-    db_time=None,
-    conn_info=None,
-):
-    db_node_state = _create_db_node_state(
-        pg_last_xlog_receive_location,
-        pg_is_in_recovery,
-        connection,
-        replication_time_lag,
-        fetch_time=fetch_time,
-        db_time=db_time,
-    )
-    pgl.cluster_state[instance] = db_node_state
-    pgl.config["remote_conns"][instance] = conn_info or {"host": instance}
-
-
 def test_check_cluster_state_warning(pgl):
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="kuu",
         pg_last_xlog_receive_location="1/aaaaaaaa",
@@ -133,7 +60,7 @@ def test_check_cluster_state_warning(pgl):
         replication_time_lag=40.0,
     )
 
-    _set_instance_cluster_state(pgl, instance="old_master", pg_is_in_recovery=False, connection=True)
+    set_instance_cluster_state(pgl, instance="old_master", pg_is_in_recovery=False, connection=True)
     pgl.current_master = "old_master"
     pgl.own_db = "kuu"
     pgl.over_warning_limit_command = "fake_command"
@@ -149,7 +76,7 @@ def test_check_cluster_state_warning(pgl):
     assert pgl.create_alert_file.call_count == 1
 
     # and then the replication catches up
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="kuu",
         pg_last_xlog_receive_location="1/aaaaaaaa",
@@ -163,7 +90,7 @@ def test_check_cluster_state_warning(pgl):
 
 
 def test_check_cluster_do_failover_one_standby(pgl):
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="old_master",
         pg_is_in_recovery=False,
@@ -171,7 +98,7 @@ def test_check_cluster_do_failover_one_standby(pgl):
         db_time=datetime.datetime(year=2014, month=1, day=1),
     )
 
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="own_db",
         pg_last_xlog_receive_location="1/aaaaaaaa",
@@ -192,7 +119,7 @@ def test_check_cluster_do_failover_one_standby(pgl):
 
 
 def test_check_cluster_master_gone_one_standby_one_observer(pgl):
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="old_master",
         pg_is_in_recovery=False,
@@ -200,7 +127,7 @@ def test_check_cluster_master_gone_one_standby_one_observer(pgl):
         db_time=datetime.datetime(year=2014, month=1, day=1),
     )
 
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="own_db",
         pg_last_xlog_receive_location="1/aaaaaaaa",
@@ -209,7 +136,7 @@ def test_check_cluster_master_gone_one_standby_one_observer(pgl):
         replication_time_lag=0.0,
     )
     pgl.own_db = "own_db"
-    _add_to_observer_state(
+    add_to_observer_state(
         pgl,
         "observer",
         "old_master",
@@ -217,7 +144,7 @@ def test_check_cluster_master_gone_one_standby_one_observer(pgl):
         connection=False,
         db_time=datetime.datetime(year=2014, month=1, day=1),
     )
-    _add_to_observer_state(
+    add_to_observer_state(
         pgl,
         "observer",
         "own_db",
@@ -251,7 +178,7 @@ def test_check_cluster_master_gone_one_standby_one_observer(pgl):
 
 
 def test_check_cluster_do_failover_one_standby_one_observer(pgl):
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="old_master",
         pg_is_in_recovery=False,
@@ -259,7 +186,7 @@ def test_check_cluster_do_failover_one_standby_one_observer(pgl):
         db_time=datetime.datetime(year=2014, month=1, day=1),
     )
 
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="own_db",
         pg_last_xlog_receive_location="1/aaaaaaaa",
@@ -268,7 +195,7 @@ def test_check_cluster_do_failover_one_standby_one_observer(pgl):
         replication_time_lag=130.0,
     )
     pgl.own_db = "own_db"
-    _add_to_observer_state(
+    add_to_observer_state(
         pgl,
         "observer",
         "old_master",
@@ -276,7 +203,7 @@ def test_check_cluster_do_failover_one_standby_one_observer(pgl):
         connection=False,
         db_time=datetime.datetime(year=2014, month=1, day=1),
     )
-    _add_to_observer_state(
+    add_to_observer_state(
         pgl,
         "observer",
         "own_db",
@@ -297,7 +224,7 @@ def test_check_cluster_do_failover_one_standby_one_observer(pgl):
 
 
 def test_check_cluster_do_failover_with_a_node_which_is_is_maintenance(pgl):
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="old_master",
         pg_is_in_recovery=False,
@@ -305,7 +232,7 @@ def test_check_cluster_do_failover_with_a_node_which_is_is_maintenance(pgl):
         db_time=datetime.datetime(year=2014, month=1, day=1),
     )
 
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="kuu",
         pg_last_xlog_receive_location="1/aaaaaaaa",
@@ -326,9 +253,9 @@ def test_check_cluster_do_failover_with_a_node_which_is_is_maintenance(pgl):
 
 
 def test_check_cluster_do_failover_with_a_node_which_should_never_be_promoted(pgl):
-    _set_instance_cluster_state(pgl, instance="old_master", pg_is_in_recovery=False, connection=False)
+    set_instance_cluster_state(pgl, instance="old_master", pg_is_in_recovery=False, connection=False)
 
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="kuu",
         pg_last_xlog_receive_location="1/aaaaaaaa",
@@ -346,9 +273,9 @@ def test_check_cluster_do_failover_with_a_node_which_should_never_be_promoted(pg
 
 
 def test_check_cluster_do_failover_two_standbys(pgl):
-    _set_instance_cluster_state(pgl, instance="old_master", pg_is_in_recovery=False, connection=False)
+    set_instance_cluster_state(pgl, instance="old_master", pg_is_in_recovery=False, connection=False)
 
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="kuu",
         pg_last_xlog_receive_location="1/aaaaaaaa",
@@ -358,7 +285,7 @@ def test_check_cluster_do_failover_two_standbys(pgl):
     )
     pgl.own_db = "kuu"
     # we put the second standby _WELL_ ahead
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="puu",
         pg_last_xlog_receive_location="2/aaaaaaaa",
@@ -377,7 +304,7 @@ def test_check_cluster_do_failover_two_standbys(pgl):
 def test_check_cluster_do_failover_two_standbys_when_the_one_ahead_can_never_be_promoted(
     pgl,
 ):
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="old_master",
         pg_is_in_recovery=False,
@@ -385,7 +312,7 @@ def test_check_cluster_do_failover_two_standbys_when_the_one_ahead_can_never_be_
         db_time=datetime.datetime(year=2014, month=1, day=1),
     )
 
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="kuu",
         pg_last_xlog_receive_location="1/aaaaaaaa",
@@ -395,7 +322,7 @@ def test_check_cluster_do_failover_two_standbys_when_the_one_ahead_can_never_be_
     )
     pgl.own_db = "kuu"
     # we put the second standby _WELL_ ahead
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="puu",
         pg_last_xlog_receive_location="2/aaaaaaaa",
@@ -415,7 +342,7 @@ def test_failover_with_no_master_anymore(pgl):
     # this should trigger an immediate failover as we have two
     # standbys online but we've never seen a master
     pgl.own_db = "kuu"
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="kuu",
         pg_last_xlog_receive_location="F/aaaaaaaa",
@@ -423,7 +350,7 @@ def test_failover_with_no_master_anymore(pgl):
         connection=True,
         replication_time_lag=0,
     )
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="puu",
         pg_last_xlog_receive_location="2/aaaaaaaa",
@@ -438,10 +365,10 @@ def test_failover_with_no_master_anymore(pgl):
 
 
 def test_failover_over_replication_lag_when_still_connected_to_master(pgl):
-    _set_instance_cluster_state(pgl, instance="old_master", pg_is_in_recovery=False, connection=False)
+    set_instance_cluster_state(pgl, instance="old_master", pg_is_in_recovery=False, connection=False)
 
     # We will make our own node to be the furthest along so we get considered for promotion
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="kuu",
         pg_last_xlog_receive_location="2/aaaaaaaa",
@@ -459,10 +386,10 @@ def test_failover_over_replication_lag_when_still_connected_to_master(pgl):
 def test_failover_over_replication_lag_with_one_observer_one_standby_no_connections(
     pgl,
 ):
-    _set_instance_cluster_state(pgl, instance="old_master", pg_is_in_recovery=False, connection=False)
+    set_instance_cluster_state(pgl, instance="old_master", pg_is_in_recovery=False, connection=False)
 
     # We will make our own node to be the furthest along so we get considered for promotion
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="own_db",
         pg_last_xlog_receive_location="2/aaaaaaaa",
@@ -472,7 +399,7 @@ def test_failover_over_replication_lag_with_one_observer_one_standby_no_connecti
     )
     pgl.own_db = "own_db"
 
-    _add_to_observer_state(
+    add_to_observer_state(
         pgl,
         "observer",
         "old_master",
@@ -480,7 +407,7 @@ def test_failover_over_replication_lag_with_one_observer_one_standby_no_connecti
         connection=False,
         db_time=datetime.datetime(year=2014, month=1, day=1),
     )
-    _add_to_observer_state(
+    add_to_observer_state(
         pgl,
         "observer",
         "own_db",
@@ -496,10 +423,10 @@ def test_failover_over_replication_lag_with_one_observer_one_standby_no_connecti
 
 
 def test_cluster_state_when_observer_has_also_non_members_of_our_current_cluster(pgl):
-    _set_instance_cluster_state(pgl, instance="old_master", pg_is_in_recovery=False, connection=True)
+    set_instance_cluster_state(pgl, instance="old_master", pg_is_in_recovery=False, connection=True)
 
     # We will make our own node to be the furthest along so we get considered for promotion
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="own_db",
         pg_last_xlog_receive_location="2/aaaaaaaa",
@@ -509,7 +436,7 @@ def test_cluster_state_when_observer_has_also_non_members_of_our_current_cluster
     )
     pgl.own_db = "own_db"
 
-    _add_to_observer_state(
+    add_to_observer_state(
         pgl,
         "observer",
         "old_master",
@@ -517,7 +444,7 @@ def test_cluster_state_when_observer_has_also_non_members_of_our_current_cluster
         connection=False,
         db_time=datetime.datetime(year=2014, month=1, day=1),
     )
-    _add_to_observer_state(
+    add_to_observer_state(
         pgl,
         "observer",
         "own_db",
@@ -526,7 +453,7 @@ def test_cluster_state_when_observer_has_also_non_members_of_our_current_cluster
         connection=False,
         replication_time_lag=130.0,
     )
-    _add_to_observer_state(
+    add_to_observer_state(
         pgl,
         "observer",
         "some_other_cluster",
@@ -541,10 +468,10 @@ def test_cluster_state_when_observer_has_also_non_members_of_our_current_cluster
 
 
 def test_failover_no_connections(pgl):
-    _set_instance_cluster_state(pgl, instance="old_master", pg_is_in_recovery=False, connection=False)
+    set_instance_cluster_state(pgl, instance="old_master", pg_is_in_recovery=False, connection=False)
 
     # We will make our own node to be the furthest along so we get considered for promotion
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="kuu",
         pg_last_xlog_receive_location="2/aaaaaaaa",
@@ -555,7 +482,7 @@ def test_failover_no_connections(pgl):
     pgl.own_db = "kuu"
 
     # we put the second standby _WELL_ ahead
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="puu",
         pg_last_xlog_receive_location="1/aaaaaaaa",
@@ -569,7 +496,7 @@ def test_failover_no_connections(pgl):
 
 
 def test_failover_master_two_standbys_one_observer_no_connection_between_standbys(pgl):
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="old_master",
         pg_is_in_recovery=False,
@@ -577,7 +504,7 @@ def test_failover_master_two_standbys_one_observer_no_connection_between_standby
         db_time=datetime.datetime(year=2014, month=1, day=1),
     )
     # We will make our own node to be the furthest along so we get considered for promotion
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="own",
         pg_last_xlog_receive_location="2/aaaaaaaa",
@@ -587,7 +514,7 @@ def test_failover_master_two_standbys_one_observer_no_connection_between_standby
     )
     pgl.own_db = "own"
 
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="other",
         pg_last_xlog_receive_location="1/aaaaaaaa",
@@ -597,7 +524,7 @@ def test_failover_master_two_standbys_one_observer_no_connection_between_standby
     )
 
     # Add observer state
-    _add_to_observer_state(
+    add_to_observer_state(
         pgl,
         "observer",
         "old_master",
@@ -605,7 +532,7 @@ def test_failover_master_two_standbys_one_observer_no_connection_between_standby
         connection=False,
         db_time=datetime.datetime(year=2014, month=1, day=1),
     )
-    _add_to_observer_state(
+    add_to_observer_state(
         pgl,
         "observer",
         "other",
@@ -614,7 +541,7 @@ def test_failover_master_two_standbys_one_observer_no_connection_between_standby
         connection=True,
         replication_time_lag=130.0,
     )
-    _add_to_observer_state(
+    add_to_observer_state(
         pgl,
         "observer",
         "own",
@@ -637,11 +564,11 @@ def test_failover_master_one_standby_one_observer_no_connections(pgl):
     pgl.own_db = "own"
 
     # Add observer state
-    _add_to_observer_state(pgl, "observer", "old_master", pg_is_in_recovery=False, connection=True)
+    add_to_observer_state(pgl, "observer", "old_master", pg_is_in_recovery=False, connection=True)
 
     # add db state
-    _set_instance_cluster_state(pgl, instance="old_master", pg_is_in_recovery=False, connection=True)
-    _set_instance_cluster_state(
+    set_instance_cluster_state(pgl, instance="old_master", pg_is_in_recovery=False, connection=True)
+    set_instance_cluster_state(
         pgl,
         instance="own",
         pg_last_xlog_receive_location="2/aaaaaaaa",
@@ -655,8 +582,8 @@ def test_failover_master_one_standby_one_observer_no_connections(pgl):
     assert pgl.execute_external_command.call_count == 0
 
     # Add observer state
-    _add_to_observer_state(pgl, "observer", "old_master", pg_is_in_recovery=False, connection=True)
-    _add_to_observer_state(
+    add_to_observer_state(pgl, "observer", "old_master", pg_is_in_recovery=False, connection=True)
+    add_to_observer_state(
         pgl,
         "observer",
         "own",
@@ -666,7 +593,7 @@ def test_failover_master_one_standby_one_observer_no_connections(pgl):
         replication_time_lag=9.0,
     )
 
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="own",
         pg_last_xlog_receive_location="2/aaaaaaaa",
@@ -682,7 +609,7 @@ def test_failover_master_one_standby_one_observer_no_connections(pgl):
     assert pgl.replication_lag_over_warning_limit is True  # we keep the warning on
 
     # observer state
-    _add_to_observer_state(
+    add_to_observer_state(
         pgl,
         "observer",
         "old_master",
@@ -690,7 +617,7 @@ def test_failover_master_one_standby_one_observer_no_connections(pgl):
         connection=False,
         db_time=datetime.datetime(year=2014, month=1, day=1),
     )
-    _add_to_observer_state(
+    add_to_observer_state(
         pgl,
         "observer",
         "own",
@@ -700,7 +627,7 @@ def test_failover_master_one_standby_one_observer_no_connections(pgl):
         replication_time_lag=140.0,
     )
     # lose own connection to master
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="old_master",
         pg_is_in_recovery=False,
@@ -719,8 +646,8 @@ def test_failover_master_one_standby_no_observer_no_connections(pgl, failover_on
     pgl._failover_on_disconnect = failover_on_disconnect  # pylint: disable=protected-access
 
     # add db state
-    _set_instance_cluster_state(pgl, instance="primary", pg_is_in_recovery=False, connection=False)
-    _set_instance_cluster_state(
+    set_instance_cluster_state(pgl, instance="primary", pg_is_in_recovery=False, connection=False)
+    set_instance_cluster_state(
         pgl,
         instance="this_host",
         pg_last_xlog_receive_location="2/aaaaaaaa",
@@ -735,7 +662,7 @@ def test_failover_master_one_standby_no_observer_no_connections(pgl, failover_on
 
     # age the configuration, we should still be fine as we've seen the primary at `utcnow`
     pgl.cluster_nodes_change_time = time.monotonic() - pgl.missing_master_from_config_timeout - 1
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="primary",
         pg_is_in_recovery=False,
@@ -746,7 +673,7 @@ def test_failover_master_one_standby_no_observer_no_connections(pgl, failover_on
     assert pgl.execute_external_command.call_count == 0
 
     # now set the db_time to be bigger than the failover-timeout
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="primary",
         pg_is_in_recovery=False,
@@ -761,9 +688,9 @@ def test_failover_master_one_standby_no_observer_no_connections(pgl, failover_on
 
 
 def test_find_current_master(pgl):
-    _set_instance_cluster_state(pgl, instance="master", pg_is_in_recovery=False, connection=True)
+    set_instance_cluster_state(pgl, instance="master", pg_is_in_recovery=False, connection=True)
     # We will make our own node to be the furthest along so we get considered for promotion
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="own",
         pg_last_xlog_receive_location="2/aaaaaaaa",
@@ -777,7 +704,7 @@ def test_find_current_master(pgl):
 
 
 def test_two_standby_failover_and_autofollow(pgl, tmpdir):
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="old_master",
         pg_is_in_recovery=False,
@@ -785,7 +712,7 @@ def test_two_standby_failover_and_autofollow(pgl, tmpdir):
         fetch_time=datetime.datetime(year=2014, month=1, day=1),
     )
     # We will make our own node to be the furthest from master so we don't get considered for promotion
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="own",
         pg_last_xlog_receive_location="1/aaaaaaaa",
@@ -794,7 +721,7 @@ def test_two_standby_failover_and_autofollow(pgl, tmpdir):
         replication_time_lag=130.0,
     )
     pgl.own_db = "own"
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="other",
         pg_last_xlog_receive_location="2/aaaaaaaa",
@@ -808,7 +735,7 @@ def test_two_standby_failover_and_autofollow(pgl, tmpdir):
     assert pgl.execute_external_command.call_count == 0
     assert pgl.current_master == "old_master"
 
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="other",
         pg_last_xlog_receive_location="2/aaaaaaaa",
@@ -959,7 +886,7 @@ def test_node_map_disconnected_current_master(pgl):
 
 def test_standbys_failover_equal_replication_positions(pgl):
     now = datetime.datetime.utcnow()
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="192.168.54.183",
         pg_last_xlog_receive_location="0/70004D8",
@@ -970,7 +897,7 @@ def test_standbys_failover_equal_replication_positions(pgl):
         db_time=now,
         conn_info="foobar",
     )
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="192.168.57.180",
         pg_last_xlog_receive_location=None,
@@ -981,7 +908,7 @@ def test_standbys_failover_equal_replication_positions(pgl):
         db_time=now - datetime.timedelta(seconds=3600),
         conn_info="foobar",
     )
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="192.168.63.4",
         pg_last_xlog_receive_location="0/70004D8",
@@ -1001,6 +928,90 @@ def test_standbys_failover_equal_replication_positions(pgl):
     assert pgl.execute_external_command.call_count == 0
     # If we're the highest we should see call_count increment
     pgl.own_db = "192.168.63.4"
+    pgl.check_cluster_state()
+    assert pgl.execute_external_command.call_count == 1
+
+
+def test_standbys_failover_equal_replication_positions_with_priorities(pgl):
+    now = datetime.datetime.utcnow()
+    set_instance_cluster_state(
+        pgl,
+        instance="192.168.54.183",
+        pg_last_xlog_receive_location="0/70004D8",
+        pg_is_in_recovery=True,
+        connection=True,
+        replication_time_lag=400.435871,
+        fetch_time=now,
+        db_time=now,
+        conn_info="foobar",
+    )
+    set_instance_cluster_state(
+        pgl,
+        instance="192.168.57.180",
+        pg_last_xlog_receive_location=None,
+        pg_is_in_recovery=False,
+        connection=False,
+        replication_time_lag=0.0,
+        fetch_time=now - datetime.timedelta(seconds=3600),
+        db_time=now - datetime.timedelta(seconds=3600),
+        conn_info="foobar",
+    )
+    set_instance_cluster_state(
+        pgl,
+        instance="192.168.63.4",
+        pg_last_xlog_receive_location="0/70004D8",
+        pg_is_in_recovery=True,
+        connection=True,
+        replication_time_lag=401.104655,
+        fetch_time=now,
+        db_time=now,
+        conn_info="foobar",
+    )
+    set_instance_cluster_state(
+        pgl,
+        instance="192.168.62.4",
+        pg_last_xlog_receive_location="0/70004D8",
+        pg_is_in_recovery=True,
+        connection=True,
+        replication_time_lag=401.104655,
+        fetch_time=now,
+        db_time=now,
+        conn_info="foobar",
+    )
+    set_instance_cluster_state(
+        pgl,
+        instance="192.168.52.183",
+        pg_last_xlog_receive_location="0/70004D8",
+        pg_is_in_recovery=True,
+        connection=True,
+        replication_time_lag=401.104655,
+        fetch_time=now,
+        db_time=now,
+        conn_info="foobar",
+    )
+
+    pgl.current_master = "192.168.57.180"
+
+    pgl.config["failover_priorities"] = {
+        "192.168.54.183": 1000,
+        "192.168.52.183": 1000,
+        "192.168.63.4": 0,
+    }
+
+    # This is highest by instance, but lower in priority
+    pgl.own_db = "192.168.63.4"
+    pgl.check_cluster_state()
+    assert pgl.execute_external_command.call_count == 0
+    # This is second highest by instance, but no priority set - it's counted at 0
+    pgl.own_db = "192.168.62.4"
+    pgl.check_cluster_state()
+    assert pgl.execute_external_command.call_count == 0
+    # This node shares highest priority == 1000, but is lower by instance
+    pgl.own_db = "192.168.52.183"
+    pgl.check_cluster_state()
+    assert pgl.execute_external_command.call_count == 0
+    # Second lowest by instance, but with priority == 1000
+    pgl.own_db = "192.168.54.183"
     pgl.check_cluster_state()
     assert pgl.execute_external_command.call_count == 1
 
@@ -1044,14 +1055,14 @@ def test_poll_observers_on_warning_only(pgl):
     pgl.config["poll_observers_on_warning_only"] = True
     pgl.config["observers"] = {"local": "URL"}
     pgl.own_db = "kuu"
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="master",
         pg_is_in_recovery=False,
         connection=True,
         db_time=datetime.datetime.min,
     )
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="kuu",
         pg_last_xlog_receive_location="1/aaaaaaaa",
@@ -1065,21 +1076,21 @@ def test_poll_observers_on_warning_only(pgl):
     assert pgl.replication_lag_over_warning_limit
     assert pgl.observer_state_newer_than is not None
 
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="master",
         pg_is_in_recovery=False,
         connection=False,
         db_time=datetime.datetime.min,
     )
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="kuu",
         pg_last_xlog_receive_location="1/aaaaaaaa",
         pg_is_in_recovery=True,
         replication_time_lag=140.0,
     )
-    _add_to_observer_state(
+    add_to_observer_state(
         pgl,
         "observer",
         "master",
@@ -1174,14 +1185,14 @@ def test_apply_stale_config_restarts(
     pgl.current_master = "primary"
     pgl.own_db = "secondary"
     pgl.primary_conninfo_template = "user=replicator password=fake_pass sslmode=require"
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="primary",
         pg_is_in_recovery=False,
         connection=True,
         db_time=datetime.datetime.utcnow(),
     )
-    _set_instance_cluster_state(
+    set_instance_cluster_state(
         pgl,
         instance="secondary",
         pg_is_in_recovery=True,

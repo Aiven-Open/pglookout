@@ -7,6 +7,7 @@ Copyright (c) 2014 F-Secure
 This file is under the Apache License, Version 2.0.
 See the file `LICENSE` for details.
 """
+
 from . import logutil, statsd, version
 from .cluster_monitor import ClusterMonitor
 from .common import convert_xlog_location_to_offset, get_iso_timestamp, parse_iso_datetime
@@ -643,19 +644,35 @@ class PgLookout:
         if not known_replication_positions:
             self.log.warning("No known replication positions, canceling failover consideration")
             return
-        # If there are multiple nodes with the same replication positions pick the one with the "highest" name
-        # to make sure pglookouts running on all standbys make the same decision.  The rationale for picking
-        # the "highest" node is that there's no obvious way for pglookout to decide which of the nodes is
-        # "best" beyond looking at replication positions, but picking the highest id supports environments
-        # where nodes are assigned identifiers from an incrementing sequence identifiers and where we want to
-        # promote the latest and greatest node.  In static environments node identifiers can be priority
-        # numbers, with the highest number being the one that should be preferred.
-        furthest_along_instance = max(known_replication_positions[max(known_replication_positions)])
+
+        # Find the instance that is furthest along.
+        # If there are multiple nodes with the same replication positions, try to identify one to promote either
+        # via explicit failover priority configuration or pick the one with the "highest" name by sort order.
+        # The rationale of this logic is to ensure all participating pglookouts running on all standbys make
+        # the same decision. The "highest" name works well in environments where nodes are assigned identifiers
+        # from an incrementing sequence and where we want to promote the latest and greatest node.
+
+        # First, find the list of instances that share the more recent replication position
+        furthest_along_instances = known_replication_positions[max(known_replication_positions)]
+        # Second, sort them by "instance name"
+        furthest_along_instances = sorted(furthest_along_instances, reverse=True)
+        # Third, if we have explicit failover priorities, use those for selecting the to be promoted instance
+        if "failover_priorities" in self.config:
+            highest_priority = max(
+                self.config["failover_priorities"].get(instance, 0) for instance in furthest_along_instances
+            )
+            furthest_along_instances = [
+                instance
+                for instance in furthest_along_instances
+                if self.config["failover_priorities"].get(instance) == highest_priority
+            ]
+        furthest_along_instance = furthest_along_instances[0]
         self.log.warning(
             "Node that is furthest along is: %r, all replication positions were: %r",
             furthest_along_instance,
             sorted(known_replication_positions),
         )
+
         total_observers = len(self.connected_observer_nodes) + len(self.disconnected_observer_nodes)
         # +1 in the calculation comes from the master node
         total_amount_of_nodes = len(standby_nodes) + 1 - len(self.never_promote_these_nodes) + total_observers

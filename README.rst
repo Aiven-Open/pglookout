@@ -295,6 +295,14 @@ over_warning_limit_command and to create a warning file.
 
 Shell command to execute in case the node has deemed itself in need of promotion
 
+``failover_priorities`` (default ``{}``)
+
+Define priority of nodes for promotion, in case there are multiple candidates
+with the same replication position.  This allows to ensure all pglookout instances
+would elect the same standby for promotion, while still allowing for topologies
+with e.g. less preferred standbys in secondary network locations. By default,
+pglookout uses remote connection ids for the same selection purpose.
+
 ``known_gone_nodes`` (default ``[]``)
 
 Lists nodes that are explicitly known to have left the cluster.  If the old
