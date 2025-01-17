@@ -478,6 +478,8 @@ class PgLookout:
             self.consider_failover(own_state, master_node, standby_nodes)
 
     def consider_failover(self, own_state, master_node, standby_nodes):
+        if self._config_version > self._config_version_applied:
+            self.log.warning("We couldn't apply the latest config version, do not make any decision with outdated config")
         if not master_node or not master_node.get("connection"):
             # no master node at all in the cluster?
             self.log.warning(
