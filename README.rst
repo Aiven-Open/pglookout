@@ -221,6 +221,36 @@ PG database connection strings that the pglookout process should monitor.
 Keys of the object should be names of the remotes and values must be valid
 PostgreSQL connection strings or connection info objects.
 
+``cascading_replication_primary`` (default ``null``)
+
+Makes pglookout to consider matching instance as primary even though PG on
+the node is in recovery mode. This allows setting cascading replication like
+this::
+
+          Active cluster1                           DR cluster 2
+      +---------------------+                +-------------------------+
+      | primary1 (writable) |<---------------| primary2 (non-writable) |
+      +---------------------+                +-------------------------+
+         ^               ^                      ^                   ^
+         |               |                      |                   |
+  +------------+   +------------+         +------------+     +------------+
+  | secondary1 |   | secondary2 |         | secondary3 |     | secondary4 |
+  +------------+   +------------+         +------------+     +------------+
+
+In a setup like this, the DR cluster 2 could replace the active cluster as
+a whole in case the active cluster runs in a region that becomes unavailable.
+The ``primary2``, which is not writable and not really a primary in that sense, but
+may be promoted as an actual writable primary in case all nodes in the active
+cluster 1 fail, is observing the state of ``primary1``, ``secondary1`` and ``secondary2``.
+
+``secondary3`` and ``secondary4`` in the DR cluster 2 need to be configured to replicate
+from ``primary2`` and need to monitor the availability of that so that they can
+take over should it fail. However, as ``primary2`` is not writable it would not by
+default be considered to be a master node and replication would not get
+configured correctly nor would availability monitoring work as expected.
+Setting ``cascading_replication_primary=primary2`` for ``secondary3`` and ``secondary4``
+makes this configuration work as expected.
+
 ``primary_conninfo_template``
 
 Connection string or connection info object template to use when setting a new
