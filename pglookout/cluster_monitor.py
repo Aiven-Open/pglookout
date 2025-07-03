@@ -44,7 +44,7 @@ class ReplicationSlot:
     state_data: str
 
 
-def wait_select(conn, timeout=5.0):
+def wait_select(conn, timeout=10.0):
     end_time = time.monotonic() + timeout
     while time.monotonic() < end_time:
         time_left = end_time - time.monotonic()
