@@ -16,3 +16,6 @@ dist/
 
 # Generated targets
 pglookout-rpm-src.tar
+
+# Generated documentation
+book/
